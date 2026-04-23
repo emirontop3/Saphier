@@ -430,16 +430,21 @@ function SapphireLib:CreateWindow(config)
 
     -- Elements container
     local ElementsContainer = Instance.new("ScrollingFrame", Main)
-    ElementsContainer.Name = "ElementsContainer"
-    ElementsContainer.Size = UDim2.new(1,-150,1,-50)
-    ElementsContainer.Position = UDim2.new(0,150,0,50)
-    ElementsContainer.BackgroundTransparency = 1
-    ElementsContainer.ScrollBarThickness = 5
-    ElementsContainer.ScrollBarImageColor3 = SapphireLib.Themes.Default.Divider
-    ElementsContainer.CanvasSize = UDim2.new(0,0,0,0)
-    Instance.new("UIListLayout", ElementsContainer).Padding = UDim.new(0,6)
-    Instance.new("UIPadding", ElementsContainer).Padding = UDim.new(0,15,10,10,15)
+ElementsContainer.Name = "ElementsContainer"
+ElementsContainer.Size = UDim2.new(1,-150,1,-50)
+ElementsContainer.Position = UDim2.new(0,150,0,50)
+ElementsContainer.BackgroundTransparency = 1
+ElementsContainer.ScrollBarThickness = 5
+ElementsContainer.ScrollBarImageColor3 = SapphireLib.Themes.Default.Divider
+ElementsContainer.CanvasSize = UDim2.new(0,0,0,0)
+Instance.new("UIListLayout", ElementsContainer).Padding = UDim.new(0, 6)
 
+-- Fixed padding
+local padding = Instance.new("UIPadding", ElementsContainer)
+padding.PaddingTop = UDim.new(0, 15)
+padding.PaddingBottom = UDim.new(0, 10)
+padding.PaddingLeft = UDim.new(0, 10)
+padding.PaddingRight = UDim.new(0, 15)
     -- Dragging
     local dragging, dragInput, mousePos, framePos
     dragFrame.InputBegan:Connect(function(input)
