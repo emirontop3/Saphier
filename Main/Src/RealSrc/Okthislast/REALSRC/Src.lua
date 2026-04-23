@@ -597,16 +597,23 @@ padding.PaddingRight = UDim.new(0, 15)
         tabTitle.Text = name
 
         local tabContainer = Instance.new("ScrollingFrame", Main)
-        tabContainer.Name = name .. "_container"
-        tabContainer.Size = UDim2.new(1,-150,1,-50)
-        tabContainer.Position = UDim2.new(0,150,0,50)
-        tabContainer.BackgroundTransparency = 1
-        tabContainer.ScrollBarThickness = 5
-        tabContainer.ScrollBarImageColor3 = SapphireLib.Themes.Default.Divider
-        tabContainer.CanvasSize = UDim2.new(0,0,0,0)
-        tabContainer.Visible = false
-        Instance.new("UIListLayout", tabContainer).Padding = UDim.new(0,6)
-        Instance.new("UIPadding", tabContainer).Padding = UDim.new(0,15,10,10,15)
+tabContainer.Name = name .. "_container"
+tabContainer.Size = UDim2.new(1, -150, 1, -50)
+tabContainer.Position = UDim2.new(0, 150, 0, 50)
+tabContainer.BackgroundTransparency = 1
+tabContainer.ScrollBarThickness = 5
+tabContainer.ScrollBarImageColor3 = SapphireLib.Themes.Default.Divider
+tabContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
+tabContainer.Visible = false
+
+Instance.new("UIListLayout", tabContainer).Padding = UDim.new(0, 6)
+
+-- FIXED PADDING
+local tabPadding = Instance.new("UIPadding", tabContainer)
+tabPadding.PaddingTop = UDim.new(0, 15)
+tabPadding.PaddingBottom = UDim.new(0, 10)
+tabPadding.PaddingLeft = UDim.new(0, 10)
+tabPadding.PaddingRight = UDim.new(0, 15)
 
         tabBtn.MouseButton1Click:Connect(function()
             selectTab(tabBtn, tabContainer)
