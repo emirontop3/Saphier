@@ -1,4 +1,4 @@
-local lib = loadstring(game:HttpGet("YOUR_RAW_URL_HERE"))()
+local lib = loadstring(game:HttpGet("https://raw.githubusercontent.com/emirontop3/Saphier/refs/heads/main/deepseek_lua_20260423_06e21c.lua"))()
 
 -- Window with config saving and mobile support
 local Window = lib:CreateWindow({
