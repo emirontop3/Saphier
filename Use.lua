@@ -5,7 +5,7 @@
 --]]
 
 -- 1. Load the library
-local lib = loadstring(game:HttpGet("YOUR_RAW_URL_HERE"))()
+local lib = loadstring(game:HttpGet("https://raw.githubusercontent.com/emirontop3/Saphier/refs/heads/main/deepseek_lua_20260423_06e21c.lua"))()
 
 -- 2. Create the main window
 local Window = lib:CreateWindow({
