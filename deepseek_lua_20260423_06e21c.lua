@@ -293,32 +293,51 @@ end
 -- Config load/save
 function SapphireLib:LoadConfig()
     if not SapphireLib.SaveCfg or not isfolder or not isfile or not readfile then return end
-    pcall(function()
-        local path = SapphireLib.Folder .. "/" .. game.GameId .. ".json"
-        if isfile(path) then
-            local data = HttpService:JSONDecode(readfile(path))
-            for flagName, flagVal in pairs(data) do
-                if SapphireLib.Flags[flagName] then
-                    spawn(function()
-                        local flag = SapphireLib.Flags[flagName]
-                        if flag.Type == "Colorpicker" then
-                            flag:Set(unpackColor(flagVal))
-                        else
-                            flag:Set(flagVal)
-                        end
-                    end)
-                end
-            end
-            SapphireLib:Notify({Title = "Config", Content = "Loaded saved configuration.", Duration = 4})
-        end
+    local path = SapphireLib.Folder .. "/" .. game.GameId .. ".json"
+    if not isfile(path) then return end
+
+    local decodeSuccess, data = pcall(function()
+        return HttpService:JSONDecode(readfile(path))
     end)
+    if not decodeSuccess then
+        warn("Sapphire Library – Config file is corrupted, ignoring.")
+        return
+    end
+
+    for flagName, flagVal in pairs(data) do
+        if SapphireLib.Flags[flagName] then
+            spawn(function()
+                local flag = SapphireLib.Flags[flagName]
+                -- pcall around the actual set to avoid any crashes
+                local ok, err = pcall(function()
+                    if flag.Type == "Colorpicker" then
+                        flag:Set(unpackColor(flagVal))
+                    else
+                        flag:Set(flagVal)
+                    end
+                end)
+                if not ok then
+                    warn("Sapphire Library – Failed to load flag '" .. flagName .. "': " .. tostring(err))
+                end
+            end)
+        end
+    end
 end
 function SapphireLib:SaveConfig()
     if not SapphireLib.SaveCfg or not isfolder or not writefile then return end
     local data = {}
     for name, flag in pairs(SapphireLib.Flags) do
         if flag.Save then
-            if flag.Type == "Colorpicker" then data[name] = packColor(flag.Value) else data[name] = flag.Value end
+            local ok, val = pcall(function()
+                if flag.Type == "Colorpicker" then
+                    return packColor(flag.Value)
+                else
+                    return flag.Value
+                end
+            end)
+            if ok then
+                data[name] = val
+            end
         end
     end
     local path = SapphireLib.Folder .. "/" .. game.GameId .. ".json"
