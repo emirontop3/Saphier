@@ -1,169 +1,108 @@
---[[
-    Sapphire UI Library – Full Demo Script
-    This script shows how to use all library features.
-    Replace the library loadstring with your own (or paste the library code here).
---]]
+local lib = loadstring(game:HttpGet("YOUR_RAW_URL_HERE"))()
 
--- 1. Load the library
-local lib = loadstring(game:HttpGet("https://raw.githubusercontent.com/emirontop3/Saphier/refs/heads/main/deepseek_lua_20260423_06e21c.lua"))()
-
--- 2. Create the main window
+-- Window with config saving and mobile support
 local Window = lib:CreateWindow({
-    Name = "Sapphire Demo Hub",
+    Name = "Sapphire Demo",
     ConfigFolder = "SapphireDemo",
-    SaveConfig = true,               -- enables flag saving
-    IntroEnabled = true,             -- opening animation
+    SaveConfig = true,
+    IntroEnabled = true,
     IntroText = "Sapphire UI",
     IntroIcon = "rbxassetid://8834748103",
-    ShowIcon = false,                -- set to true to show an icon in the title bar
+    ShowIcon = false,
     Icon = "rbxassetid://4483362458",
     HidePremium = false
 })
 
--- 3. Create tabs
+-- Tabs
 local MainTab = Window:CreateTab("Main", "rbxassetid://3944703587")
 local SettingsTab = Window:CreateTab("Settings", "rbxassetid://4483362458")
 
--- 4. Create sections inside the first tab
+-- Sections
 local CombatSection = MainTab:CreateSection("Combat")
-local MiscSection = MainTab:CreateSection("Misc")
+local MiscSection = MainTab:CreateSection("Miscellaneous")
 
--- 5. Add elements to CombatSection
+-- === COMBAT SECTION ===
 
--- Button
 CombatSection:CreateButton({
     Name = "Kill Nearest Enemy",
     Callback = function()
-        print("Button pressed!")
-        -- your kill logic here
+        print("Button clicked!")
     end
 })
 
--- Toggle
-local autoAttackToggle = CombatSection:CreateToggle({
+CombatSection:CreateToggle({
     Name = "Auto Attack",
     Default = false,
-    Color = Color3.fromRGB(9, 99, 195),  -- optional custom color
-    Flag = "autoAttackFlag",
+    Flag = "autoAttack",
     Save = true,
-    Callback = function(value)
-        print("Auto Attack:", value)
-    end
+    Color = Color3.fromRGB(9,99,195),
+    Callback = function(v) print("Auto Attack:", v) end
 })
 
--- Slider
 CombatSection:CreateSlider({
     Name = "Attack Range",
-    Min = 5,
-    Max = 50,
-    Increment = 1,
-    Default = 10,
+    Min = 5, Max = 50, Default = 10,
     Suffix = "studs",
-    Color = Color3.fromRGB(9, 149, 98),
-    Flag = "attackRangeSlider",
+    Flag = "attackRange",
     Save = true,
-    Callback = function(value)
-        print("Attack Range set to:", value)
-    end
+    Callback = function(v) print("Range:", v) end
 })
 
--- Dropdown
 local weaponDropdown = CombatSection:CreateDropdown({
     Name = "Weapon",
-    Options = {"Sword", "Gun", "Fist", "Magic Wand"},
+    Options = {"Sword", "Gun", "Fist"},
     Default = "Sword",
-    Flag = "weaponDropdown",
+    Flag = "weapon",
     Save = true,
-    Callback = function(selected)
-        print("Weapon selected:", selected)
-    end
+    Callback = function(opt) print("Weapon:", opt) end
 })
 
--- Refresh dropdown options later (if needed)
+-- Refresh dropdown later if needed
 -- weaponDropdown:Refresh({"Bow", "Spear", "Axe"})
 
--- Color Picker
 CombatSection:CreateColorPicker({
     Name = "ESP Color",
-    Default = Color3.fromRGB(255, 0, 0),
+    Default = Color3.fromRGB(255,0,0),
     Flag = "espColor",
     Save = true,
-    Callback = function(color)
-        print("New ESP Color:", color)
-    end
+    Callback = function(c) print("Color:", c) end
 })
 
--- Keybind
 CombatSection:CreateKeybind({
     Name = "Fly Key",
     Default = Enum.KeyCode.F,
-    Hold = true,  -- true = hold to activate, false = press to toggle
-    Flag = "flyKeybind",
+    Hold = true,
+    Flag = "flyKey",
     Save = true,
-    Callback = function(state)
-        if state then
-            print("Fly ON")
-        else
-            print("Fly OFF")
-        end
-    end
+    Callback = function(state) if state then print("Fly ON") else print("Fly OFF") end end
 })
 
--- Textbox
 CombatSection:CreateTextbox({
     Name = "Custom Message",
     Default = "",
     Placeholder = "Type here...",
     TextDisappear = false,
-    Callback = function(text)
-        print("Textbox input:", text)
-    end
+    Callback = function(t) print("Textbox:", t) end
 })
 
--- 6. Elements in MiscSection
+-- === MISCELLANEOUS SECTION ===
 
--- Label (simple)
-MiscSection:CreateLabel("This is a simple label")
-
--- Label with icon + custom background color
-MiscSection:CreateLabel("Warning Label", "rbxassetid://4483362458", Color3.fromRGB(255, 159, 49))
-
--- Paragraph (title + multiline content)
-MiscSection:CreateParagraph("Instructions", "Welcome to Sapphire UI! Use the tabs and elements to control your script. Mobile users can hide the UI and tap the 'Show UI' button to bring it back.")
-
--- Divider (horizontal line)
+MiscSection:CreateLabel("This is a label")
+MiscSection:CreateLabel("Warning", "rbxassetid://4483362458", Color3.fromRGB(255,159,49))
+MiscSection:CreateParagraph("Instructions", "Use the elements to control your script. Mobile users can tap the 'Show UI' button after hiding.")
 MiscSection:CreateDivider()
 
--- 7. Settings tab
-local ThemeSection = SettingsTab:CreateSection("Appearance")
-ThemeSection:CreateButton({
-    Name = "Set Light Theme",
-    Callback = function()
-        Window:SetTheme("Light")
-    end
-})
-ThemeSection:CreateButton({
-    Name = "Set Ocean Theme",
-    Callback = function()
-        Window:SetTheme("Ocean")
-    end
-})
-ThemeSection:CreateButton({
-    Name = "Set Default Theme",
-    Callback = function()
-        Window:SetTheme("Default")
-    end
-})
+-- === SETTINGS TAB ===
 
--- 8. Notifications examples
-lib:Notify({Title = "Welcome", Content = "Sapphire UI loaded successfully!", Duration = 5, Image = "rbxassetid://4384403532"})
+local ThemeSection = SettingsTab:CreateSection("Themes")
+ThemeSection:CreateButton({Name = "Default Theme", Callback = function() Window:SetTheme("Default") end})
+ThemeSection:CreateButton({Name = "Light Theme", Callback = function() Window:SetTheme("Light") end})
+ThemeSection:CreateButton({Name = "Ocean Theme", Callback = function() Window:SetTheme("Ocean") end})
+ThemeSection:CreateButton({Name = "Midnight Theme", Callback = function() Window:SetTheme("Midnight") end})
 
--- 9. Initialize config saving (load saved flags)
-lib:Init()   -- this automatically calls LoadConfig if SaveConfig = true
+-- Notifications
+lib:Notify({Title = "Welcome", Content = "Sapphire UI loaded!", Duration = 5})
+lib:Notify({Title = "Mobile", Content = IS_MOBILE and "Touch controls active." or "Desktop mode.", Duration = 4})
 
--- 10. Additional note about mobile
-if UserInputService.TouchEnabled then
-    lib:Notify({Title = "Mobile Detected", Content = "Touch controls are fully supported. Hide the UI and tap 'Show UI' to reopen.", Duration = 7})
-end
-
-print("Sapphire UI Demo ready!")
+-- Initialize config loading
+lib:Init()
