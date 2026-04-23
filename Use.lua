@@ -22,7 +22,9 @@ Section:CreateSlider({
     Min = 10, Max = 50, Default = 25,
     Flag = "speedSlider",
     Save = true,
-    Callback = function(v) game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = v end
+    Callback = function(v)
+        game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = v
+    end
 })
 
 Section:CreateButton({
