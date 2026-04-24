@@ -1,12 +1,11 @@
--- SimpleUI - A lightweight Roblox GUI library
--- Inspired by Orion, Rayfield, Fluent, and Luna.
-
+-- SimpleUI v1.1 - Mobile Support, Robust
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
+local Mouse = Players.LocalPlayer:GetMouse()
 
 local Library = {
     Flags = {},
@@ -21,7 +20,6 @@ local Library = {
         Accent = Color3.fromRGB(0, 150, 255),
         Stroke = Color3.fromRGB(60, 60, 60),
         Divider = Color3.fromRGB(50, 50, 50),
-        Shadow = Color3.fromRGB(0, 0, 0),
         ToggleOn = Color3.fromRGB(0, 150, 255),
         ToggleOff = Color3.fromRGB(100, 100, 100),
         Slider = Color3.fromRGB(0, 150, 255),
@@ -33,9 +31,12 @@ local Library = {
     SaveCfg = false,
 }
 
-local Icons = {} -- will be filled if Lucide loader is present
+-- Safe delay (all executors)
+local function SafeDelay(t, f)
+    delay(t, f)
+end
 
--- Utility: Create instance with properties and children
+-- Create instance
 local function Create(className, properties, children)
     local obj = Instance.new(className)
     for prop, value in pairs(properties or {}) do
@@ -49,21 +50,21 @@ local function Create(className, properties, children)
     return obj
 end
 
--- Tween a property
+-- Tween
 local function Tween(obj, goal, time, easingStyle, easingDirection)
     local tween = TweenService:Create(obj, TweenInfo.new(time or 0.3, easingStyle or Enum.EasingStyle.Quad, easingDirection or Enum.EasingDirection.Out), goal)
     tween:Play()
     return tween
 end
 
--- Add a connection and store it for cleanup
+-- Add connection + store
 function Library.AddConnection(signal, callback)
     local conn = signal:Connect(callback)
     table.insert(Library.Connections, conn)
     return conn
 end
 
--- Cleanup all connections when GUI destroyed
+-- Cleanup
 local function Cleanup()
     for _, conn in ipairs(Library.Connections) do
         conn:Disconnect()
@@ -71,95 +72,30 @@ local function Cleanup()
     Library.Connections = {}
 end
 
--- Dragging functionality
-local function MakeDraggable(gui, topbar)
+-- Mobile-safe dragging
+local function MakeDraggable(frame, topbar)
     local dragging, dragStart, startPos
-    topbar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    local function onInputBegan(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
-            startPos = gui.Position
+            startPos = frame.Position
         end
-    end)
-    topbar.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+    end
+    local function onInputChanged(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
-            gui.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
-    end)
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    end
+    local function onInputEnded(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = false
         end
-    end)
-end
-
--- MinMax close
-local function AddWindowControls(window, topbar, mainFrame)
-    local closeBtn = Create("ImageButton", {
-        Size = UDim2.new(0, 24, 0, 24),
-        Position = UDim2.new(1, -28, 0, 6),
-        BackgroundTransparency = 1,
-        Image = "rbxassetid://7733658504", -- X icon (use a known asset)
-        Parent = topbar
-    })
-    local minBtn = Create("ImageButton", {
-        Size = UDim2.new(0, 24, 0, 24),
-        Position = UDim2.new(1, -56, 0, 6),
-        BackgroundTransparency = 1,
-        Image = "rbxassetid://7733662779", -- minimize icon
-        Parent = topbar
-    })
-    local maxBtn = Create("ImageButton", {
-        Size = UDim2.new(0, 24, 0, 24),
-        Position = UDim2.new(1, -84, 0, 6),
-        BackgroundTransparency = 1,
-        Image = "rbxassetid://7733670478", -- maximize icon
-        Parent = topbar
-    })
-
-    local minimized = false
-    local maximized = false
-    local origSize = mainFrame.Size
-    local origPos = mainFrame.Position
-
-    minBtn.MouseButton1Click:Connect(function()
-        if minimized then
-            mainFrame.Size = origSize
-            mainFrame.Position = origPos
-            for _, child in ipairs(mainFrame:GetChildren()) do
-                if child.Name ~= "TopBar" then child.Visible = true end
-            end
-        else
-            origSize = mainFrame.Size
-            origPos = mainFrame.Position
-            mainFrame.Size = UDim2.new(0, origSize.X.Offset, 0, 35)
-            for _, child in ipairs(mainFrame:GetChildren()) do
-                if child.Name ~= "TopBar" then child.Visible = false end
-            end
-        end
-        minimized = not minimized
-    end)
-
-    maxBtn.MouseButton1Click:Connect(function()
-        if maximized then
-            mainFrame.Size = origSize
-            mainFrame.Position = origPos
-        else
-            origSize = mainFrame.Size
-            origPos = mainFrame.Position
-            mainFrame.Size = UDim2.new(0, workspace.CurrentCamera.ViewportSize.X - 40, 0, workspace.CurrentCamera.ViewportSize.Y - 40)
-            mainFrame.Position = UDim2.new(0, 20, 0, 20)
-        end
-        maximized = not maximized
-    end)
-
-    closeBtn.MouseButton1Click:Connect(function()
-        mainFrame.Visible = false
-        Library.AddConnection(UserInputService.InputBegan, function(input)
-            if input.KeyCode == Enum.KeyCode.RightShift then mainFrame.Visible = true end
-        end)
-    end)
+    end
+    topbar.InputBegan:Connect(onInputBegan)
+    topbar.InputChanged:Connect(onInputChanged)
+    topbar.InputEnded:Connect(onInputEnded)
 end
 
 -- Notification system
@@ -167,7 +103,7 @@ local notificationHolder
 function Library:Notify(data)
     if not notificationHolder then
         notificationHolder = Create("Frame", {
-            Parent = Library.GUI,
+            Parent = self.GUI,
             Size = UDim2.new(0, 300, 1, -20),
             Position = UDim2.new(1, -20, 1, -20),
             AnchorPoint = Vector2.new(1, 1),
@@ -181,54 +117,49 @@ function Library:Notify(data)
             })
         })
     end
-
     local notif = Create("Frame", {
         Parent = notificationHolder,
         Size = UDim2.new(1, 0, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundColor3 = Library.Theme.Background,
+        BackgroundColor3 = self.Theme.Background,
         BorderSizePixel = 0,
     }, {
         Create("UICorner", { CornerRadius = UDim.new(0, 8) }),
-        Create("UIStroke", { Color = Library.Theme.Stroke }),
+        Create("UIStroke", { Color = self.Theme.Stroke }),
         Create("UIPadding", { PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8), PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) }),
         Create("ImageLabel", {
             Size = UDim2.new(0, 20, 0, 20),
             Image = data.Image or "rbxassetid://4483345875",
             BackgroundTransparency = 1,
-            Name = "Icon",
         }),
         Create("TextLabel", {
             Size = UDim2.new(1, -30, 0, 20),
             Position = UDim2.new(0, 30, 0, 0),
             Text = data.Title or "Notification",
             Font = Enum.Font.GothamBold,
-            TextColor3 = Library.Theme.Text,
+            TextColor3 = self.Theme.Text,
             BackgroundTransparency = 1,
             TextXAlignment = Enum.TextXAlignment.Left,
-            Name = "Title",
         }),
         Create("TextLabel", {
             Size = UDim2.new(1, 0, 0, 0),
             Position = UDim2.new(0, 0, 0, 25),
             Text = data.Content or "",
             Font = Enum.Font.Gotham,
-            TextColor3 = Library.Theme.TextDark,
+            TextColor3 = self.Theme.TextDark,
             BackgroundTransparency = 1,
             TextWrapped = true,
             AutomaticSize = Enum.AutomaticSize.Y,
-            Name = "Content",
         })
     })
-
     Tween(notif, {Position = UDim2.new(0, 0, 0, 0)}, 0.5)
-    task.delay(data.Duration or 3, function()
+    SafeDelay(data.Duration or 3, function()
         Tween(notif, {BackgroundTransparency = 1, Position = UDim2.new(1, 20, 0, 0)}, 0.5)
-        task.delay(0.6, function() notif:Destroy() end)
+        SafeDelay(0.6, function() notif:Destroy() end)
     end)
 end
 
--- Configuration
+-- Config helpers
 local function PackColor(color)
     return {R = math.floor(color.R * 255), G = math.floor(color.G * 255), B = math.floor(color.B * 255)}
 end
@@ -276,7 +207,7 @@ function Library:SaveConfig(name)
     end
 end
 
--- Element creation functions to be used inside sections/tabs
+-- Element functions
 local ElementFunctions = {}
 
 function ElementFunctions:AddButton(data)
@@ -310,7 +241,9 @@ function ElementFunctions:AddButton(data)
     end)
     btn.MouseButton1Click:Connect(function()
         Tween(btn, {BackgroundColor3 = Library.Theme.Accent}, 0.1)
-        task.delay(0.1, function() if hover then Tween(btn, {BackgroundColor3 = Library.Theme.Element:Lerp(Color3.new(1,1,1), 0.1)}) else Tween(btn, {BackgroundColor3 = Library.Theme.Element}) end end)
+        SafeDelay(0.1, function()
+            if hover then Tween(btn, {BackgroundColor3 = Library.Theme.Element:Lerp(Color3.new(1,1,1), 0.1)}) else Tween(btn, {BackgroundColor3 = Library.Theme.Element}) end
+        end)
         pcall(data.Callback)
     end)
     return btn
@@ -321,13 +254,16 @@ function ElementFunctions:AddToggle(data)
     local toggle = {}
     toggle.Save = data.Save or false
     toggle.Type = "Toggle"
+    toggle.Get = function() return toggled end
     toggle.Set = function(val)
         toggled = val
-        Tween(frame.Switch, {BackgroundColor3 = val and Library.Theme.ToggleOn or Library.Theme.ToggleOff}, 0.2)
-        Tween(frame.Switch.Indicator, {Position = val and UDim2.new(1, -16, 0.5, 0) or UDim2.new(0, 4, 0.5, 0)})
+        local frame = toggle._frame
+        if frame then
+            Tween(frame.Switch, {BackgroundColor3 = val and Library.Theme.ToggleOn or Library.Theme.ToggleOff}, 0.2)
+            Tween(frame.Switch.Indicator, {Position = val and UDim2.new(1, -16, 0.5, 0) or UDim2.new(0, 4, 0.5, 0)})
+        end
         if data.Callback then pcall(data.Callback, val) end
     end
-    toggle.Get = function() return toggled end
 
     local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 34),
@@ -360,14 +296,14 @@ function ElementFunctions:AddToggle(data)
             }, { Create("UICorner", { CornerRadius = UDim.new(1, 0) }) }),
         })
     })
+    toggle._frame = frame
 
     local btn = Create("TextButton", { Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, Text = "", Parent = frame })
     btn.MouseButton1Click:Connect(function()
-        toggled = not toggled
-        toggle.Set(toggled)
-        if data.Flag then Library.Flags[data.Flag] = toggle end
+        toggle:Set(not toggled)
     end)
-    toggle.Set(toggled)
+
+    toggle:Set(toggled)
     if data.Flag then Library.Flags[data.Flag] = toggle end
     return toggle
 end
@@ -377,14 +313,18 @@ function ElementFunctions:AddSlider(data)
     local slider = {}
     slider.Save = data.Save or false
     slider.Type = "Slider"
+    slider.Get = function() return val end
     slider.Set = function(v)
         v = math.clamp(tonumber(v) or 0, data.Min, data.Max)
-        local factor = (v - data.Min) / (data.Max - data.Min)
-        bar.Progress.Size = UDim2.new(factor, 0, 1, 0)
-        bar.Value.Text = tostring(v) .. (data.Suffix or "")
+        val = v
+        local bar = slider._bar
+        if bar then
+            local factor = (v - data.Min) / (data.Max - data.Min)
+            bar.Progress.Size = UDim2.new(factor, 0, 1, 0)
+            bar.Value.Text = tostring(v) .. (data.Suffix or "")
+        end
         if data.Callback then pcall(data.Callback, v) end
     end
-    slider.Get = function() return val end
 
     local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 50),
@@ -427,20 +367,21 @@ function ElementFunctions:AddSlider(data)
         })
     })
     local bar = frame.SliderBar
+    slider._bar = bar
 
     local dragging
     bar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
         end
     end)
     bar.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = false
         end
     end)
     UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local perc = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
             val = data.Min + (data.Max - data.Min) * perc
             slider.Set(val)
@@ -458,19 +399,21 @@ function ElementFunctions:AddDropdown(data)
     local drop = {}
     drop.Save = data.Save or false
     drop.Type = "Dropdown"
+    drop.Get = function() return selected end
     drop.Set = function(val)
         if table.find(options, val) then
             selected = val
-            header.Selected.Text = val
-            for _, btn in ipairs(list:GetChildren()) do
-                if btn:IsA("TextButton") then
-                    Tween(btn, {BackgroundTransparency = btn.Text == val and 0.7 or 1}, 0.2)
+            if drop._header then drop._header.Selected.Text = val end
+            if drop._list then
+                for _, btn in ipairs(drop._list:GetChildren()) do
+                    if btn:IsA("TextButton") then
+                        Tween(btn, {BackgroundTransparency = btn.Text == val and 0.7 or 1}, 0.2)
+                    end
                 end
             end
             if data.Callback then pcall(data.Callback, val) end
         end
     end
-    drop.Get = function() return selected end
 
     local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 36),
@@ -497,13 +440,15 @@ function ElementFunctions:AddDropdown(data)
             Create("ImageButton", {
                 Size = UDim2.new(0, 20, 0, 20),
                 Position = UDim2.new(1, -30, 0.5, -10),
-                Image = "rbxassetid://7072706796", -- down arrow
+                Image = "rbxassetid://7072706796",
                 BackgroundTransparency = 1,
                 Name = "Arrow",
             })
         })
     })
     local header = frame.Header
+    drop._header = header
+
     local list = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 0),
         Position = UDim2.new(0, 0, 1, 0),
@@ -516,6 +461,7 @@ function ElementFunctions:AddDropdown(data)
         Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 2) }),
         Create("UIPadding", { PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 2) })
     })
+    drop._list = list
 
     local toggled = false
     header.Arrow.MouseButton1Click:Connect(function()
@@ -566,13 +512,13 @@ function ElementFunctions:AddKeybind(data)
     local keybind = {}
     keybind.Save = data.Save or false
     keybind.Type = "Keybind"
+    keybind.Get = function() return bind end
     keybind.Set = function(key)
         if typeof(key) == "EnumItem" then key = key end
         if typeof(key) == "string" then key = Enum.KeyCode[key] or bind end
         bind = key
-        frame.Value.Text = key.Name
+        if keybind._frame then keybind._frame.Value.Text = key.Name end
     end
-    keybind.Get = function() return bind end
 
     local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 34),
@@ -603,6 +549,7 @@ function ElementFunctions:AddKeybind(data)
             Create("UIStroke", { Color = Library.Theme.Stroke }),
         })
     })
+    keybind._frame = frame
 
     local valBtn = frame.Value
     valBtn.MouseButton1Click:Connect(function()
@@ -694,21 +641,22 @@ function ElementFunctions:AddDivider()
     })
 end
 
--- Color picker (simplified: only text input RGB)
 function ElementFunctions:AddColorPicker(data)
     local color = data.Default or Color3.new(1,1,1)
     local picker = {}
     picker.Save = data.Save or false
     picker.Type = "ColorPicker"
+    picker.Get = function() return color end
     picker.Set = function(clr)
         color = clr
-        frame.Display.BackgroundColor3 = clr
-        frame.R.Text = "R: "..math.floor(clr.R*255)
-        frame.G.Text = "G: "..math.floor(clr.G*255)
-        frame.B.Text = "B: "..math.floor(clr.B*255)
+        if picker._frame then
+            picker._frame.Display.BackgroundColor3 = clr
+            picker._frame.R.Text = "R: "..math.floor(clr.R*255)
+            picker._frame.G.Text = "G: "..math.floor(clr.G*255)
+            picker._frame.B.Text = "B: "..math.floor(clr.B*255)
+        end
         if data.Callback then pcall(data.Callback, clr) end
     end
-    picker.Get = function() return color end
 
     local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 34),
@@ -735,11 +683,11 @@ function ElementFunctions:AddColorPicker(data)
         Create("TextLabel", { Name = "R", Size = UDim2.new(0, 50, 0, 12), Position = UDim2.new(0, 12, 1, -28), Text = "R: 255", Font = Enum.Font.Gotham, TextColor3 = Library.Theme.TextDark, BackgroundTransparency = 1, TextXAlignment = Enum.TextXAlignment.Left }),
         Create("TextLabel", { Name = "G", Size = UDim2.new(0, 50, 0, 12), Position = UDim2.new(0, 72, 1, -28), Text = "G: 255", Font = Enum.Font.Gotham, TextColor3 = Library.Theme.TextDark, BackgroundTransparency = 1, TextXAlignment = Enum.TextXAlignment.Left }),
         Create("TextLabel", { Name = "B", Size = UDim2.new(0, 50, 0, 12), Position = UDim2.new(0, 132, 1, -28), Text = "B: 255", Font = Enum.Font.Gotham, TextColor3 = Library.Theme.TextDark, BackgroundTransparency = 1, TextXAlignment = Enum.TextXAlignment.Left }),
-        -- Sliders for RGB (simplified: we'll use textboxes)
         Create("TextBox", { Name = "RInput", Size = UDim2.new(0, 40, 0, 16), Position = UDim2.new(0, 200, 1, -26), Text = "255", Font = Enum.Font.Gotham, TextColor3 = Library.Theme.Text, BackgroundColor3 = Library.Theme.Input, ClearTextOnFocus = false }),
         Create("TextBox", { Name = "GInput", Size = UDim2.new(0, 40, 0, 16), Position = UDim2.new(0, 260, 1, -26), Text = "255", Font = Enum.Font.Gotham, TextColor3 = Library.Theme.Text, BackgroundColor3 = Library.Theme.Input, ClearTextOnFocus = false }),
         Create("TextBox", { Name = "BInput", Size = UDim2.new(0, 40, 0, 16), Position = UDim2.new(0, 320, 1, -26), Text = "255", Font = Enum.Font.Gotham, TextColor3 = Library.Theme.Text, BackgroundColor3 = Library.Theme.Input, ClearTextOnFocus = false }),
     })
+    picker._frame = frame
 
     local function updateFromTextBoxes()
         local r = math.clamp(tonumber(frame.RInput.Text) or 0, 0, 255)
@@ -802,7 +750,27 @@ function Library:CreateWindow(data)
         }),
     })
 
-    AddWindowControls(window, topbar, main)
+    -- Window controls (close)
+    local closeBtn = Create("TextButton", {
+        Parent = topbar,
+        Size = UDim2.new(0, 30, 0, 30),
+        Position = UDim2.new(1, -35, 0, 2),
+        BackgroundColor3 = Color3.fromRGB(200, 50, 50),
+        Text = "X",
+        Font = Enum.Font.GothamBold,
+        TextColor3 = Color3.new(1,1,1),
+        BorderSizePixel = 0,
+    }, {
+        Create("UICorner", { CornerRadius = UDim.new(0, 4) }),
+    })
+    closeBtn.MouseButton1Click:Connect(function()
+        main.Visible = false
+        self:Notify({Title = "Hidden", Content = "Press RightShift to reopen the UI", Duration = 3})
+        self.AddConnection(UserInputService.InputBegan, function(input)
+            if input.KeyCode == Enum.KeyCode.RightShift then main.Visible = true end
+        end)
+    end)
+
     MakeDraggable(main, topbar)
 
     local tabContainer = Create("Frame", {
@@ -883,7 +851,6 @@ function Library:CreateWindow(data)
 
         local tab = { Container = tabPage }
 
-        -- Add section support
         function tab:CreateSection(name)
             local section = Create("Frame", {
                 Parent = tabPage,
@@ -909,19 +876,15 @@ function Library:CreateWindow(data)
                     Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 6) }),
                 })
             })
-            local sectionElements = setmetatable({ Container = section.Holder }, { __index = ElementFunctions })
-            return sectionElements
+            return setmetatable({Container = section.Holder}, {__index = ElementFunctions})
         end
 
-        -- Direct elements without section
-        local directElements = setmetatable({ Container = tabPage }, { __index = ElementFunctions })
-        return directElements
+        return setmetatable(tab, {__index = ElementFunctions})
     end
 
     return window
 end
 
--- Cleanup function
 function Library:Destroy()
     if self.GUI then
         self.GUI:Destroy()
