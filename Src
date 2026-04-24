@@ -1,10 +1,15 @@
--- SimpleUI v2.0 - Improved Layout, Scrolling & Mobile Support
+-- =============================================
+-- SimpleUI v2.1 - Full-featured Roblox GUI Library
+-- with working scrollframes, mobile drag & more
+-- =============================================
+
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
+local Mouse = Players.LocalPlayer:GetMouse()
 
 local Library = {
     Flags = {},
@@ -31,13 +36,13 @@ local Library = {
     SaveCfg = false,
 }
 
--- Helper functions
+-- ============== UTILITIES ==============
 local function SafeDelay(t, f) delay(t, f) end
 
 local function Create(class, props, children)
     local obj = Instance.new(class)
     for k, v in pairs(props or {}) do obj[k] = v end
-    for _, child in ipairs(children or {}) do child.Parent = obj end
+    if children then for _, child in ipairs(children) do child.Parent = obj end end
     return obj
 end
 
@@ -58,33 +63,39 @@ local function Cleanup()
     Library.Connections = {}
 end
 
--- Mobile‑safe dragging
+-- Mobile-safe dragging
 local function MakeDraggable(frame, topbar)
     local dragging, dragStart, startPos
-    local function onBegan(input)
+    topbar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
             startPos = frame.Position
         end
-    end
-    local function onChanged(input)
+    end)
+    topbar.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
             frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
-    end
-    local function onEnded(input)
+    end)
+    topbar.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = false
         end
-    end
-    topbar.InputBegan:Connect(onBegan)
-    topbar.InputChanged:Connect(onChanged)
-    topbar.InputEnded:Connect(onEnded)
+    end)
 end
 
--- Notifications
+-- ScrollFrame CanvasSize updater
+local function UpdateScrollSize(scrollFrame)
+    if not scrollFrame:IsA("ScrollingFrame") then return end
+    local layout = scrollFrame:FindFirstChildWhichIsA("UIListLayout")
+    if layout then
+        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
+    end
+end
+
+-- Notification holder
 local notifHolder
 function Library:Notify(data)
     if not notifHolder then
@@ -145,7 +156,7 @@ function Library:Notify(data)
     end)
 end
 
--- Config helpers
+-- ============== CONFIGURATION ==============
 local function PackColor(c) return {R = math.floor(c.R*255), G = math.floor(c.G*255), B = math.floor(c.B*255)} end
 local function UnpackColor(t) return Color3.fromRGB(t.R, t.G, t.B) end
 
@@ -189,17 +200,7 @@ function Library:SaveConfig(name)
     end
 end
 
--- Element creation helpers
-local function UpdateScrollSize(container)
-    if container:IsA("ScrollingFrame") then
-        local layout = container:FindFirstChildWhichIsA("UIListLayout")
-        if layout then
-            container.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
-        end
-    end
-end
-
--- Element functions (with better layout)
+-- ============== ELEMENT FUNCTIONS ==============
 local ElementFunctions = {}
 
 function ElementFunctions:AddButton(data)
@@ -239,7 +240,7 @@ function ElementFunctions:AddButton(data)
         end)
         pcall(data.Callback)
     end)
-    UpdateScrollSize(self.Container.Parent) -- parent is ScrollingFrame
+    if self.ScrollFrame then UpdateScrollSize(self.ScrollFrame) end
     return btn
 end
 
@@ -300,7 +301,7 @@ function ElementFunctions:AddToggle(data)
 
     toggle:Set(toggled)
     if data.Flag then Library.Flags[data.Flag] = toggle end
-    UpdateScrollSize(self.Container.Parent)
+    if self.ScrollFrame then UpdateScrollSize(self.ScrollFrame) end
     return toggle
 end
 
@@ -387,7 +388,7 @@ function ElementFunctions:AddSlider(data)
 
     slider.Set(val)
     if data.Flag then Library.Flags[data.Flag] = slider end
-    UpdateScrollSize(self.Container.Parent)
+    if self.ScrollFrame then UpdateScrollSize(self.ScrollFrame) end
     return slider
 end
 
@@ -502,7 +503,7 @@ function ElementFunctions:AddDropdown(data)
 
     drop.Set(selected)
     if data.Flag then Library.Flags[data.Flag] = drop end
-    UpdateScrollSize(self.Container.Parent)
+    if self.ScrollFrame then UpdateScrollSize(self.ScrollFrame) end
     return drop
 end
 
@@ -570,6 +571,7 @@ function ElementFunctions:AddKeybind(data)
     end)
 
     if data.Flag then Library.Flags[data.Flag] = keybind end
+    if self.ScrollFrame then UpdateScrollSize(self.ScrollFrame) end
     return keybind
 end
 
@@ -605,7 +607,7 @@ function ElementFunctions:AddTextbox(data)
         end
         if data.ClearOnFocusLost then textbox.Text = "" end
     end)
-    UpdateScrollSize(self.Container.Parent)
+    if self.ScrollFrame then UpdateScrollSize(self.ScrollFrame) end
     return textbox
 end
 
@@ -628,7 +630,7 @@ function ElementFunctions:AddLabel(data)
             TextSize = 14,
         })
     })
-    UpdateScrollSize(self.Container.Parent)
+    if self.ScrollFrame then UpdateScrollSize(self.ScrollFrame) end
 end
 
 function ElementFunctions:AddDivider()
@@ -643,7 +645,7 @@ function ElementFunctions:AddDivider()
             BackgroundColor3 = Library.Theme.Divider,
         })
     })
-    UpdateScrollSize(self.Container.Parent)
+    if self.ScrollFrame then UpdateScrollSize(self.ScrollFrame) end
 end
 
 function ElementFunctions:AddColorPicker(data)
@@ -707,11 +709,11 @@ function ElementFunctions:AddColorPicker(data)
 
     picker.Set(color)
     if data.Flag then Library.Flags[data.Flag] = picker end
-    UpdateScrollSize(self.Container.Parent)
+    if self.ScrollFrame then UpdateScrollSize(self.ScrollFrame) end
     return picker
 end
 
--- Window creation
+-- ============== WINDOW CREATION ==============
 function Library:CreateWindow(data)
     local window = {}
     self.SaveCfg = data.SaveConfig or false
@@ -735,18 +737,14 @@ function Library:CreateWindow(data)
     }, {
         Create("UICorner", { CornerRadius = UDim.new(0, 10) }),
         Create("UIStroke", { Color = Library.Theme.Stroke, Thickness = 1 }),
-        Create("Frame", { -- shadow effect
-            Size = UDim2.new(1, 0, 1, 0),
-            BackgroundTransparency = 1,
-            ZIndex = -1,
-        }, { Create("ImageLabel", {
-            Image = "rbxassetid://5028857084", -- simple shadow
+        Create("ImageLabel", {
+            Image = "rbxassetid://5028857084",
             Size = UDim2.new(1, 30, 1, 30),
             Position = UDim2.new(-0.5, -15, -0.5, -15),
             BackgroundTransparency = 1,
             ImageTransparency = 0.8,
             ImageColor3 = Library.Theme.Shadow,
-        })}),
+        }),
     })
 
     local topbar = Create("Frame", {
@@ -792,7 +790,7 @@ function Library:CreateWindow(data)
 
     MakeDraggable(main, topbar)
 
-    -- Tab container (scrollable)
+    -- Tab scroll (left side)
     local tabScroll = Create("ScrollingFrame", {
         Parent = main,
         Size = UDim2.new(0, 160, 1, -40),
@@ -807,7 +805,7 @@ function Library:CreateWindow(data)
         Create("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), PaddingTop = UDim.new(0, 10) }),
     })
 
-    -- Content area (scrollable)
+    -- Content area (right side) - SCROLLABLE
     local content = Create("ScrollingFrame", {
         Parent = main,
         Size = UDim2.new(1, -170, 1, -40),
@@ -821,13 +819,26 @@ function Library:CreateWindow(data)
         Create("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10) }),
     })
 
-    -- Update tab scroll canvas
-    local function updateTabScroll()
-        local layout = tabScroll:FindFirstChildWhichIsA("UIListLayout")
+    -- Track scroll updates for both containers
+    local function maintainScroll(scrollFrame)
+        local layout = scrollFrame:FindFirstChildWhichIsA("UIListLayout")
         if layout then
-            tabScroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
+            -- Update canvas when content changes
+            scrollFrame.ChildAdded:Connect(function()
+                layout:GetPropertyChangedSignal("AbsoluteContentSize"):Wait()
+                scrollFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
+            end)
+            scrollFrame.ChildRemoved:Connect(function()
+                layout:GetPropertyChangedSignal("AbsoluteContentSize"):Wait()
+                scrollFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
+            end)
+            layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                scrollFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
+            end)
         end
     end
+    maintainScroll(tabScroll)
+    maintainScroll(content)
 
     local currentTab
 
@@ -881,9 +892,10 @@ function Library:CreateWindow(data)
             tabPage.Visible = true
         end)
 
-        updateTabScroll()
-
-        local tab = { Container = tabPage }
+        local tab = {
+            Container = tabPage,
+            ScrollFrame = content, -- pass for scroll updates
+        }
 
         function tab:CreateSection(name)
             local section = Create("Frame", {
@@ -910,19 +922,14 @@ function Library:CreateWindow(data)
                     Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 6) }),
                 })
             })
-            return setmetatable({Container = section.Holder}, {__index = ElementFunctions})
+            return setmetatable({
+                Container = section.Holder,
+                ScrollFrame = content,
+            }, { __index = ElementFunctions })
         end
 
-        return setmetatable(tab, {__index = ElementFunctions})
+        return setmetatable(tab, { __index = ElementFunctions })
     end
-
-    -- Update content scroll when children change
-    content.ChildAdded:Connect(function()
-        UpdateScrollSize(content)
-    end)
-    content.ChildRemoved:Connect(function()
-        UpdateScrollSize(content)
-    end)
 
     return window
 end
