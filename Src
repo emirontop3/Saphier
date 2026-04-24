@@ -1,522 +1,1155 @@
 --[[
-    Aurora UI Library v1.0
-    by Sirius & Contributors
-    A modern, feature-rich UI library for Roblox exploit scripts.
-    
-    Features:
-    - Glassmorphism design with animated gradients
-    - Full mobile/touch support with auto-scaling
-    - 10+ built-in themes + custom theme editor
-    - All standard elements: Button, Toggle, Slider, Dropdown (multi/player), ColorPicker, Keybind, Textbox, Label, Paragraph, Divider
-    - Notification system
-    - Configuration saving with auto-load
-    - Key system (optional)
-    - Home tab with player info & server stats
-    - Search functionality
-    - Intro animation
-    
-    Usage:
-    local lib = loadstring(game:HttpGet("URL"))()
-    local win = lib:CreateWindow({
-        Name = "My Hub",
-        ConfigFolder = "MyHub",
-        SaveConfig = true,
-        KeySystem = false,
-        KeySettings = { Key = {"123"} }
-    })
-    local tab = win:CreateTab("Main", "home")
-    local section = tab:CreateSection("Combat")
-    section:CreateToggle({Name = "Auto Attack", Flag = "autoAttack", Save = true, Callback = function(v) end})
-    lib:Notify({Title = "Hello", Content = "World"})
-    lib:Init()
+	Aurora UI Library v1.0
+	Created by Assistant. Fully documented & feature-rich GUI library.
+	Minimum 1000 lines.
 --]]
 
---========== SERVICES ==========
+local AuroraLib = {}
+AuroraLib.Flags = {}
+AuroraLib.Connections = {}
+AuroraLib.Theme = {
+	Default = {
+		Main = Color3.fromRGB(25, 25, 25),
+		Second = Color3.fromRGB(35, 35, 35),
+		Stroke = Color3.fromRGB(60, 60, 60),
+		Divider = Color3.fromRGB(60, 60, 60),
+		Text = Color3.fromRGB(240, 240, 240),
+		TextDark = Color3.fromRGB(150, 150, 150),
+		ElementBG = Color3.fromRGB(38, 38, 38),
+		ElementHover = Color3.fromRGB(45, 45, 45),
+		ElementStroke = Color3.fromRGB(55, 55, 55),
+		ToggleEnabled = Color3.fromRGB(0, 140, 255),
+		ToggleDisabled = Color3.fromRGB(100, 100, 100),
+		SliderBG = Color3.fromRGB(50, 50, 50),
+		SliderFill = Color3.fromRGB(0, 140, 255),
+		DropdownArrow = Color3.fromRGB(200, 200, 200),
+		InputBG = Color3.fromRGB(50, 50, 50),
+		InputStroke = Color3.fromRGB(70, 70, 70),
+		Placeholder = Color3.fromRGB(178, 178, 178),
+		NotificationBG = Color3.fromRGB(30, 30, 30),
+		NotificationStroke = Color3.fromRGB(70, 70, 70),
+	},
+	Light = {
+		Main = Color3.fromRGB(235, 235, 235),
+		Second = Color3.fromRGB(245, 245, 245),
+		Stroke = Color3.fromRGB(170, 170, 170),
+		Divider = Color3.fromRGB(170, 170, 170),
+		Text = Color3.fromRGB(30, 30, 30),
+		TextDark = Color3.fromRGB(80, 80, 80),
+		ElementBG = Color3.fromRGB(250, 250, 250),
+		ElementHover = Color3.fromRGB(230, 230, 230),
+		ElementStroke = Color3.fromRGB(200, 200, 200),
+		ToggleEnabled = Color3.fromRGB(0, 140, 255),
+		ToggleDisabled = Color3.fromRGB(150, 150, 150),
+		SliderBG = Color3.fromRGB(200, 200, 200),
+		SliderFill = Color3.fromRGB(0, 140, 255),
+		DropdownArrow = Color3.fromRGB(100, 100, 100),
+		InputBG = Color3.fromRGB(220, 220, 220),
+		InputStroke = Color3.fromRGB(190, 190, 190),
+		Placeholder = Color3.fromRGB(140, 140, 140),
+		NotificationBG = Color3.fromRGB(255, 255, 255),
+		NotificationStroke = Color3.fromRGB(180, 180, 180),
+	},
+}
+AuroraLib.SelectedTheme = "Default"
+AuroraLib.ThemeObjects = {}
+AuroraLib.Folder = "AuroraLib"
+
+-- Services
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-local Players = game:GetService("Players")
-local CoreGui = game:GetService("CoreGui")
 local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
-local Localization = game:GetService("LocalizationService")
+local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
-local Camera = workspace.CurrentCamera
+local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
 
---========== HELPERS ==========
-local isStudio = RunService:IsStudio()
-local mobileScale = UserInputService.TouchEnabled and 1.3 or 1
-local baseHeight = 38 * mobileScale
-local baseFontSize = 15 * mobileScale
-local smallFontSize = 13 * mobileScale
-
-local function packColor(c) return {R = c.R*255, G = c.G*255, B = c.B*255} end
-local function unpackColor(t) return Color3.fromRGB(t.R, t.G, t.B) end
-local function round(n, inc) return math.floor(n/inc + math.sign(n)*0.5)*inc end
-
-local function safeCallback(fn, ...)
-    if fn then
-        local ok, err = pcall(fn, ...)
-        if not ok then warn("Aurora – Callback error: "..tostring(err)) end
-    end
+-- Utility Functions
+local function Create(className, properties, children)
+	local obj = Instance.new(className)
+	for prop, value in pairs(properties or {}) do
+		obj[prop] = value
+	end
+	for _, child in ipairs(children or {}) do
+		child.Parent = obj
+	end
+	return obj
 end
 
-local function checkConfig(c, type)
-    if type ~= "table" then
-        warn("Aurora – "..type.." expects a table config, got "..typeof(c))
-        return false
-    end
-    if not c.Name then c.Name = "Unnamed" end
-    return true
+local function CreateElement(elementName, elementFunc)
+	AuroraLib[elementName] = function(...)
+		return elementFunc(...)
+	end
 end
 
--- Connection manager
-local connections = {}
-local function addConnection(sig, fn)
-    local con = sig:Connect(fn)
-    table.insert(connections, con)
-    return con
-end
-local function cleanupConnections()
-    for _, c in ipairs(connections) do c:Disconnect() end
-    connections = {}
+local function Round(num, factor)
+	return math.floor(num/factor + 0.5) * factor
 end
 
---========== ICONS (Lucide + Material) ==========
-local Icons = {}
-pcall(function()
-    Icons = HttpService:JSONDecode(game:HttpGetAsync("https://raw.githubusercontent.com/evoincorp/lucideblox/master/src/modules/util/icons.json")).icons
-end)
-local MaterialIcons = {
-    ["home"] = "http://www.roblox.com/asset/?id=6026568195",
-    ["search"] = "http://www.roblox.com/asset/?id=6031154871",
-    ["settings"] = "http://www.roblox.com/asset/?id=6031280882",
-    ["close"] = "http://www.roblox.com/asset/?id=6031094678",
-    ["minimize"] = "http://www.roblox.com/asset/?id=6026568240",
-    ["maximize"] = "http://www.roblox.com/asset/?id=6031094691",
-    ["sparkle"] = "rbxassetid://4483362748",
-    ["check"] = "http://www.roblox.com/asset/?id=6031094667",
-    ["info"] = "http://www.roblox.com/asset/?id=6026568227",
-    ["warning"] = "http://www.roblox.com/asset/?id=6031071053"
-}
-local function getIcon(name, source)
-    source = source or "Material"
-    if source == "Material" and MaterialIcons[name] then return MaterialIcons[name] end
-    if source == "Lucide" and Icons[name] then
-        local data = Icons[name]
-        return {id = data[1], imageRectSize = Vector2.new(data[2][1], data[2][2]), imageRectOffset = Vector2.new(data[3][1], data[3][2])}
-    end
-    return "rbxassetid://" .. (name or "0")
-end
-local function applyIcon(obj, icon, source)
-    if type(icon) == "table" then -- Lucide
-        obj.Image = "rbxassetid://"..icon.id
-        obj.ImageRectSize = icon.imageRectSize
-        obj.ImageRectOffset = icon.imageRectOffset
-        obj.ScaleType = Enum.ScaleType.Fit
-    else
-        obj.Image = getIcon(icon, source)
-    end
+local function AddThemeObject(obj, category)
+	if not AuroraLib.ThemeObjects[category] then
+		AuroraLib.ThemeObjects[category] = {}
+	end
+	table.insert(AuroraLib.ThemeObjects[category], obj)
+	local theme = AuroraLib.Theme[AuroraLib.SelectedTheme]
+	if theme and theme[category] then
+		if obj:IsA("Frame") or obj:IsA("TextButton") then
+			obj.BackgroundColor3 = theme[category]
+		elseif obj:IsA("UIStroke") then
+			obj.Color = theme[category]
+		elseif obj:IsA("TextLabel") or obj:IsA("TextBox") then
+			obj.TextColor3 = theme[category]
+		elseif obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
+			obj.ImageColor3 = theme[category]
+		elseif obj:IsA("ScrollingFrame") then
+			obj.ScrollBarImageColor3 = theme[category]
+		end
+	end
+	return obj
 end
 
---========== THEMES ==========
-local Themes = {
-    Default = {
-        Main = Color3.fromRGB(25,25,35),
-        Second = Color3.fromRGB(32,32,45),
-        Stroke = Color3.fromRGB(60,60,80),
-        Text = Color3.fromRGB(240,240,255),
-        TextDark = Color3.fromRGB(150,150,180),
-        Divider = Color3.fromRGB(60,60,80),
-        Accent = Color3.fromRGB(100,140,255)
-    },
-    Light = {
-        Main = Color3.fromRGB(240,240,250),
-        Second = Color3.fromRGB(225,225,240),
-        Stroke = Color3.fromRGB(180,180,200),
-        Text = Color3.fromRGB(40,40,60),
-        TextDark = Color3.fromRGB(100,100,130),
-        Divider = Color3.fromRGB(200,200,220),
-        Accent = Color3.fromRGB(80,120,255)
-    },
-    Ocean = {Main = Color3.fromRGB(20,30,35), Second = Color3.fromRGB(30,45,50), Stroke = Color3.fromRGB(45,70,80), Text = Color3.fromRGB(230,240,240), TextDark = Color3.fromRGB(140,160,170), Divider = Color3.fromRGB(50,70,80), Accent = Color3.fromRGB(0,180,180)},
-    Midnight = {Main = Color3.fromRGB(15,15,30), Second = Color3.fromRGB(20,20,40), Stroke = Color3.fromRGB(40,40,70), Text = Color3.fromRGB(220,220,255), TextDark = Color3.fromRGB(130,130,180), Divider = Color3.fromRGB(40,40,70), Accent = Color3.fromRGB(140,100,255)}
-}
-local SelectedTheme = Themes.Default
-
---========== SCREEN GUI ==========
-local AuroraUI = Instance.new("ScreenGui")
-AuroraUI.Name = "Aurora"
-if syn then syn.protect_gui(AuroraUI); AuroraUI.Parent = CoreGui
-else AuroraUI.Parent = gethui() or CoreGui end
-
--- Remove old duplicates
-local function cleanDuplicates()
-    local parent = AuroraUI.Parent
-    for _, v in ipairs(parent:GetChildren()) do
-        if v.Name == "Aurora" and v ~= AuroraUI then v:Destroy() end
-    end
-end
-cleanDuplicates()
-
--- Notification holder
-local NotificationHolder = Instance.new("Frame")
-NotificationHolder.Name = "NotifHolder"
-NotificationHolder.Position = UDim2.new(1,-25,1,-25)
-NotificationHolder.Size = UDim2.new(0,300,1,-25)
-NotificationHolder.AnchorPoint = Vector2.new(1,1)
-NotificationHolder.BackgroundTransparency = 1
-NotificationHolder.Parent = AuroraUI
-
--- Mobile show/hide button
-local MobilePrompt = nil
-if UserInputService.TouchEnabled then
-    MobilePrompt = Instance.new("Frame")
-    MobilePrompt.Name = "MobilePrompt"
-    MobilePrompt.Size = UDim2.new(0,120,0,30)
-    MobilePrompt.Position = UDim2.new(0.5,0,0,-50)
-    MobilePrompt.AnchorPoint = Vector2.new(0.5,0)
-    MobilePrompt.BackgroundColor3 = Color3.fromRGB(25,25,35)
-    MobilePrompt.BackgroundTransparency = 1
-    MobilePrompt.ClipsDescendants = true
-    Instance.new("UICorner", MobilePrompt).CornerRadius = UDim.new(0,8)
-    Instance.new("UIStroke", MobilePrompt).Color = Color3.fromRGB(93,93,93)
-    local btn = Instance.new("TextButton", MobilePrompt)
-    btn.Size = UDim2.new(1,0,1,0)
-    btn.BackgroundTransparency = 1
-    btn.Text = "Show UI"
-    btn.Font = Enum.Font.GothamBold
-    btn.TextColor3 = Color3.fromRGB(240,240,255)
-    btn.TextSize = 14
-    MobilePrompt.Parent = AuroraUI
+local function UpdateTheme()
+	for category, objects in pairs(AuroraLib.ThemeObjects) do
+		local color = AuroraLib.Theme[AuroraLib.SelectedTheme][category]
+		if color then
+			for _, obj in ipairs(objects) do
+				if obj:IsA("Frame") or obj:IsA("TextButton") then
+					obj.BackgroundColor3 = color
+				elseif obj:IsA("UIStroke") then
+					obj.Color = color
+				elseif obj:IsA("TextLabel") or obj:IsA("TextBox") then
+					obj.TextColor3 = color
+				elseif obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
+					obj.ImageColor3 = color
+				elseif obj:IsA("ScrollingFrame") then
+					obj.ScrollBarImageColor3 = color
+				end
+			end
+		end
+	end
 end
 
---========== NOTIFICATIONS ==========
-function AuroraLib:Notify(config)
-    spawn(function()
-        local notif = Instance.new("Frame")
-        notif.Name = "Notif"
-        notif.BackgroundColor3 = SelectedTheme.Main
-        notif.BorderSizePixel = 0
-        notif.Size = UDim2.new(1,0,0,0)
-        notif.AutomaticSize = Enum.AutomaticSize.Y
-        notif.ClipsDescendants = true
-        Instance.new("UICorner", notif).CornerRadius = UDim.new(0,8)
-        local stroke = Instance.new("UIStroke", notif); stroke.Color = SelectedTheme.Stroke; stroke.Thickness = 1.2
-        local icon = Instance.new("ImageLabel", notif); icon.Size = UDim2.new(0,20,0,20); icon.Position = UDim2.new(0,12,0,12); icon.BackgroundTransparency = 1
-        if config.Image then applyIcon(icon, config.Image, config.ImageSource) else icon.Image = "rbxassetid://4384403532" end
-        local title = Instance.new("TextLabel", notif); title.Size = UDim2.new(1,-42,0,18); title.Position = UDim2.new(0,42,0,12); title.BackgroundTransparency = 1; title.Font = Enum.Font.GothamBold; title.TextColor3 = SelectedTheme.Text; title.TextSize = 15; title.TextXAlignment = Enum.TextXAlignment.Left; title.Text = config.Title or "Notification"
-        local content = Instance.new("TextLabel", notif); content.Size = UDim2.new(1,-24,0,0); content.Position = UDim2.new(0,12,0,36); content.BackgroundTransparency = 1; content.Font = Enum.Font.GothamSemibold; content.TextColor3 = SelectedTheme.TextDark; content.TextSize = 14; content.TextXAlignment = Enum.TextXAlignment.Left; content.TextWrapped = true; content.AutomaticSize = Enum.AutomaticSize.Y; content.Text = config.Content or ""
-        notif.Parent = NotificationHolder
-        TweenService:Create(notif, TweenInfo.new(0.5,Enum.EasingStyle.Quint), {Size = UDim2.new(1,-30,0, content.TextBounds.Y+50)}):Play()
-        wait(0.1)
-        TweenService:Create(notif, TweenInfo.new(0.5,Enum.EasingStyle.Quint), {BackgroundColor3 = SelectedTheme.Second}):Play()
-        wait((config.Duration or 5)-1.2)
-        TweenService:Create(icon, TweenInfo.new(0.4,Enum.EasingStyle.Quint), {ImageTransparency = 1}):Play()
-        TweenService:Create(content, TweenInfo.new(0.4,Enum.EasingStyle.Quint), {TextTransparency = 1}):Play()
-        TweenService:Create(title, TweenInfo.new(0.4,Enum.EasingStyle.Quint), {TextTransparency = 0.5}):Play()
-        TweenService:Create(stroke, TweenInfo.new(0.4,Enum.EasingStyle.Quint), {Transparency = 0.8}):Play()
-        wait(0.1)
-        TweenService:Create(notif, TweenInfo.new(0.6,Enum.EasingStyle.Quint), {BackgroundTransparency = 0.5, Size = UDim2.new(1,-30,0,0)}):Play()
-        wait(0.6)
-        TweenService:Create(notif, TweenInfo.new(0.5,Enum.EasingStyle.Quint), {Size = UDim2.new(1,-70,0,0)}):Play()
-        wait(0.6)
-        notif:Destroy()
-    end)
+local function PackColor(color)
+	return {R = color.R * 255, G = color.G * 255, B = color.B * 255}
 end
 
---========== CONFIG SYSTEM ==========
-AuroraLib.Flags = {}
-AuroraLib.Folder = nil
-AuroraLib.SaveCfg = false
-
-function AuroraLib:LoadConfig()
-    if not AuroraLib.SaveCfg or not isfolder or not isfile or not readfile then return end
-    local path = AuroraLib.Folder .. "/" .. game.GameId .. ".json"
-    if not isfile(path) then return end
-    local success, data = pcall(function() return HttpService:JSONDecode(readfile(path)) end)
-    if not success then return end
-    for flagName, flagVal in pairs(data) do
-        if AuroraLib.Flags[flagName] then
-            spawn(function()
-                local flag = AuroraLib.Flags[flagName]
-                local ok = pcall(function()
-                    if flag.Type == "Colorpicker" then flag:Set(unpackColor(flagVal))
-                    else flag:Set(flagVal) end
-                end)
-                if not ok then warn("Aurora – Failed to load flag "..flagName) end
-            end)
-        end
-    end
-    self:Notify({Title = "Config", Content = "Loaded saved configuration.", Duration = 4})
-end
-function AuroraLib:SaveConfig()
-    if not AuroraLib.SaveCfg or not isfolder or not writefile then return end
-    local data = {}
-    for name, flag in pairs(AuroraLib.Flags) do
-        if flag.Save then
-            local ok, val = pcall(function()
-                if flag.Type == "Colorpicker" then return packColor(flag.Value)
-                else return flag.Value end
-            end)
-            if ok then data[name] = val end
-        end
-    end
-    local path = AuroraLib.Folder .. "/" .. game.GameId .. ".json"
-    pcall(function()
-        if not isfolder(AuroraLib.Folder) then makefolder(AuroraLib.Folder) end
-        writefile(path, HttpService:JSONEncode(data))
-    end)
+local function UnpackColor(packed)
+	return Color3.fromRGB(packed.R, packed.G, packed.B)
 end
 
---========== WINDOW CREATION ==========
-function AuroraLib:CreateWindow(config)
-    config = config or {}
-    local WindowName = config.Name or "Aurora UI"
-    AuroraLib.Folder = config.ConfigFolder or WindowName
-    AuroraLib.SaveCfg = config.SaveConfig or false
-    if AuroraLib.SaveCfg and not isfolder(AuroraLib.Folder) then makefolder(AuroraLib.Folder) end
-
-    local Main = Instance.new("Frame")
-    Main.Name = "Main"; Main.Parent = AuroraUI
-    Main.BackgroundColor3 = SelectedTheme.Main
-    Main.Position = UDim2.new(0.5, -307, 0.5, -172)
-    Main.Size = UDim2.new(0, 615*mobileScale, 0, 344*mobileScale)
-    Main.ClipsDescendants = true
-    Instance.new("UICorner", Main).CornerRadius = UDim.new(0,10)
-
-    -- Gradient overlay
-    local gradient = Instance.new("UIGradient", Main)
-    gradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, SelectedTheme.Main), ColorSequenceKeypoint.new(1, SelectedTheme.Second)}
-    gradient.Rotation = 45
-
-    -- Topbar
-    local TopBar = Instance.new("Frame", Main); TopBar.Size = UDim2.new(1,0,0,50*mobileScale); TopBar.BackgroundTransparency = 1
-    local dragFrame = Instance.new("Frame", TopBar); dragFrame.Size = UDim2.new(1,0,1,0); dragFrame.BackgroundTransparency = 1
-    local Title = Instance.new("TextLabel", TopBar)
-    Title.Size = UDim2.new(1,-130,1,0); Title.Position = UDim2.new(0,15,0,0); Title.Font = Enum.Font.GothamBlack; Title.TextColor3 = SelectedTheme.Text; Title.TextSize = 20*mobileScale; Title.BackgroundTransparency = 1; Title.Text = WindowName
-
-    local CloseBtn = Instance.new("ImageButton", TopBar)
-    CloseBtn.Size = UDim2.new(0,30*mobileScale,0,30*mobileScale); CloseBtn.Position = UDim2.new(1,-45,0.5,0); CloseBtn.AnchorPoint = Vector2.new(0,0.5); CloseBtn.BackgroundTransparency = 1
-    applyIcon(CloseBtn, "close", "Material"); CloseBtn.ImageColor3 = SelectedTheme.TextDark
-    local MinBtn = Instance.new("ImageButton", TopBar)
-    MinBtn.Size = UDim2.new(0,30*mobileScale,0,30*mobileScale); MinBtn.Position = UDim2.new(1,-85,0.5,0); MinBtn.AnchorPoint = Vector2.new(0,0.5); MinBtn.BackgroundTransparency = 1
-    applyIcon(MinBtn, "minimize", "Material"); MinBtn.ImageColor3 = SelectedTheme.TextDark
-
-    -- Sidebar
-    local Sidebar = Instance.new("Frame", Main)
-    Sidebar.Size = UDim2.new(0,150*mobileScale,1,-50*mobileScale); Sidebar.Position = UDim2.new(0,0,0,50*mobileScale)
-    Sidebar.BackgroundColor3 = SelectedTheme.Second; Sidebar.BackgroundTransparency = 0.3
-    Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0,10)
-
-    local TabList = Instance.new("ScrollingFrame", Sidebar)
-    TabList.Name = "TabList"; TabList.Size = UDim2.new(1,0,1,-60*mobileScale); TabList.Position = UDim2.new(0,0,0,10*mobileScale)
-    TabList.BackgroundTransparency = 1; TabList.ScrollBarThickness = 4; TabList.ScrollBarImageColor3 = SelectedTheme.Divider; TabList.CanvasSize = UDim2.new(0,0,0,0)
-    Instance.new("UIListLayout", TabList).Padding = UDim.new(0,5)
-    Instance.new("UIPadding", TabList).PaddingLeft = UDim.new(0,8); Instance.new("UIPadding", TabList).PaddingRight = UDim.new(0,8)
-
-    -- User info at bottom
-    local UserFrame = Instance.new("Frame", Sidebar)
-    UserFrame.Size = UDim2.new(1,0,0,50*mobileScale); UserFrame.Position = UDim2.new(0,0,1,-50*mobileScale); UserFrame.BackgroundTransparency = 1
-    local Avatar = Instance.new("ImageLabel", UserFrame)
-    Avatar.Size = UDim2.new(0,32*mobileScale,0,32*mobileScale); Avatar.Position = UDim2.new(0,10,0.5,0); Avatar.AnchorPoint = Vector2.new(0,0.5); Avatar.BackgroundTransparency = 1
-    Avatar.Image = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
-    Instance.new("UICorner", Avatar).CornerRadius = UDim.new(1,0)
-    Instance.new("UIStroke", Avatar).Color = SelectedTheme.Stroke
-    local UserName = Instance.new("TextLabel", UserFrame)
-    UserName.Size = UDim2.new(1,-50,0,15); UserName.Position = UDim2.new(0,45,0,12); UserName.Font = Enum.Font.GothamBold; UserName.TextColor3 = SelectedTheme.Text; UserName.TextSize = 14*mobileScale; UserName.BackgroundTransparency = 1; UserName.Text = LocalPlayer.DisplayName
-
-    -- Elements container
-    local ElementsContainer = Instance.new("ScrollingFrame", Main)
-    ElementsContainer.Name = "ElementsContainer"
-    ElementsContainer.Size = UDim2.new(1,-150*mobileScale,1,-50*mobileScale); ElementsContainer.Position = UDim2.new(0,150*mobileScale,0,50*mobileScale)
-    ElementsContainer.BackgroundTransparency = 1; ElementsContainer.ScrollBarThickness = 5; ElementsContainer.ScrollBarImageColor3 = SelectedTheme.Divider; ElementsContainer.CanvasSize = UDim2.new(0,0,0,0)
-    Instance.new("UIListLayout", ElementsContainer).Padding = UDim.new(0,5)
-    local ep = Instance.new("UIPadding", ElementsContainer); ep.PaddingTop = UDim.new(0,10); ep.PaddingBottom = UDim.new(0,10); ep.PaddingLeft = UDim.new(0,10); ep.PaddingRight = UDim.new(0,10)
-
-    -- Dragging
-    local dragging, dragInput, mousePos, framePos
-    dragFrame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true; mousePos = input.Position; framePos = Main.Position
-            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
-        end
-    end)
-    dragFrame.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end end)
-    addConnection(UserInputService.InputChanged, function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - mousePos
-            TweenService:Create(Main, TweenInfo.new(0.35,Enum.EasingStyle.Quint,Enum.EasingDirection.Out), {Position = UDim2.new(framePos.X.Scale, framePos.X.Offset+delta.X, framePos.Y.Scale, framePos.Y.Offset+delta.Y)}):Play()
-        end
-    end)
-
-    -- Minimize/Close logic
-    local minimized, hidden = false, false
-    MinBtn.MouseButton1Click:Connect(function()
-        minimized = not minimized
-        if minimized then
-            Main.Size = UDim2.new(0, Title.TextBounds.X*mobileScale+100*mobileScale, 0, 50*mobileScale)
-            Sidebar.Visible = false; ElementsContainer.Visible = false
-        else
-            Main.Size = UDim2.new(0, 615*mobileScale, 0, 344*mobileScale)
-            Sidebar.Visible = true; ElementsContainer.Visible = true
-        end
-    end)
-    CloseBtn.MouseButton1Click:Connect(function()
-        Main.Visible = false; hidden = true
-        if MobilePrompt then
-            MobilePrompt.Position = UDim2.new(0.5,0,0,20); MobilePrompt.Visible = true
-            TweenService:Create(MobilePrompt, TweenInfo.new(0.5,Enum.EasingStyle.Quint), {BackgroundTransparency = 0.3}):Play()
-        else
-            AuroraLib:Notify({Title = "Hidden", Content = "Press RightShift to show UI", Duration = 5})
-        end
-    end)
-    if MobilePrompt then
-        MobilePrompt:FindFirstChildOfClass("TextButton").MouseButton1Click:Connect(function() Main.Visible = true; hidden = false; MobilePrompt.Visible = false end)
-    else
-        addConnection(UserInputService.InputBegan, function(input) if input.KeyCode == Enum.KeyCode.RightShift and hidden then Main.Visible = true; hidden = false end end)
-    end
-
-    -- Intro
-    if config.IntroEnabled ~= false then
-        Main.Visible = false
-        local logo = Instance.new("ImageLabel", AuroraUI); logo.AnchorPoint = Vector2.new(0.5,0.5); logo.Position = UDim2.new(0.5,0,0.4,0); logo.Size = UDim2.new(0,28,0,28); logo.BackgroundTransparency = 1; logo.Image = "rbxassetid://8834748103"; logo.ImageTransparency = 1
-        local introText = Instance.new("TextLabel", AuroraUI); introText.AnchorPoint = Vector2.new(0.5,0.5); introText.Position = UDim2.new(0.5,19,0.5,0); introText.Size = UDim2.new(1,0,1,0); introText.BackgroundTransparency = 1; introText.Font = Enum.Font.GothamBold; introText.TextColor3 = Color3.fromRGB(255,255,255); introText.TextSize = 14; introText.TextXAlignment = Enum.TextXAlignment.Center; introText.TextTransparency = 1; introText.Text = config.IntroText or "Aurora UI"
-        TweenService:Create(logo, TweenInfo.new(0.3,Enum.EasingStyle.Quad), {ImageTransparency = 0, Position = UDim2.new(0.5,0,0.5,0)}):Play(); wait(0.8)
-        TweenService:Create(logo, TweenInfo.new(0.3,Enum.EasingStyle.Quad), {Position = UDim2.new(0.5, -(introText.TextBounds.X/2),0.5,0)}):Play(); wait(0.3)
-        TweenService:Create(introText, TweenInfo.new(0.3,Enum.EasingStyle.Quad), {TextTransparency = 0}):Play(); wait(2)
-        TweenService:Create(introText, TweenInfo.new(0.3,Enum.EasingStyle.Quad), {TextTransparency = 1}):Play()
-        Main.Visible = true; logo:Destroy(); introText:Destroy()
-    end
-
-    -- Tab system
-    local firstTab = true
-    local currentTab = nil
-    local function selectTab(btn, container)
-        if currentTab == container then return end
-        currentTab = container
-        for _, b in ipairs(TabList:GetChildren()) do
-            if b:IsA("TextButton") then
-                TweenService:Create(b, TweenInfo.new(0.2,Enum.EasingStyle.Quad), {BackgroundTransparency = 0.7}):Play()
-                TweenService:Create(b.Title, TweenInfo.new(0.2,Enum.EasingStyle.Quad), {TextTransparency = 0.4}):Play()
-            end
-        end
-        for _, c in ipairs(Main:GetChildren()) do
-            if c.Name == "ElementsContainer" and c ~= container then c.Visible = false end
-        end
-        if container then container.Visible = true end
-        if btn then
-            TweenService:Create(btn, TweenInfo.new(0.2,Enum.EasingStyle.Quad), {BackgroundTransparency = 0}):Play()
-            TweenService:Create(btn.Title, TweenInfo.new(0.2,Enum.EasingStyle.Quad), {TextTransparency = 0}):Play()
-        end
-    end
-
-    local Window = {}
-    function Window:CreateTab(name, icon)
-        local btn = Instance.new("TextButton", TabList)
-        btn.Name = name; btn.Size = UDim2.new(1,0,0,35*mobileScale); btn.BackgroundColor3 = SelectedTheme.Second; btn.BackgroundTransparency = 0.7; btn.Text = ""
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
-        local tabIcon = Instance.new("ImageLabel", btn); tabIcon.Size = UDim2.new(0,20*mobileScale,0,20*mobileScale); tabIcon.Position = UDim2.new(0,8,0.5,0); tabIcon.AnchorPoint = Vector2.new(0,0.5); tabIcon.BackgroundTransparency = 1
-        applyIcon(tabIcon, icon or "home", "Material"); tabIcon.ImageColor3 = SelectedTheme.Text
-        local tabTitle = Instance.new("TextLabel", btn)
-        tabTitle.Name = "Title"; tabTitle.Size = UDim2.new(1,-35*mobileScale,1,0); tabTitle.Position = UDim2.new(0,35*mobileScale,0,0); tabTitle.BackgroundTransparency = 1; tabTitle.Font = Enum.Font.GothamMedium; tabTitle.TextColor3 = SelectedTheme.Text; tabTitle.TextSize = 14*mobileScale; tabTitle.TextXAlignment = Enum.TextXAlignment.Left; tabTitle.Text = name
-
-        local tabContainer = Instance.new("ScrollingFrame", Main)
-        tabContainer.Name = name.."_container"; tabContainer.Size = UDim2.new(1,-150*mobileScale,1,-50*mobileScale); tabContainer.Position = UDim2.new(0,150*mobileScale,0,50*mobileScale)
-        tabContainer.BackgroundTransparency = 1; tabContainer.ScrollBarThickness = 5; tabContainer.ScrollBarImageColor3 = SelectedTheme.Divider; tabContainer.CanvasSize = UDim2.new(0,0,0,0); tabContainer.Visible = false
-        Instance.new("UIListLayout", tabContainer).Padding = UDim.new(0,5)
-        Instance.new("UIPadding", tabContainer).PaddingTop = UDim.new(0,5); Instance.new("UIPadding", tabContainer).PaddingBottom = UDim.new(0,5)
-
-        btn.MouseButton1Click:Connect(function() selectTab(btn, tabContainer) end)
-        if firstTab then firstTab = false; selectTab(btn, tabContainer) end
-
-        -- Element base
-        local function elementBase(name, confName, height)
-            local h = height or baseHeight
-            local frame = Instance.new("Frame"); frame.Name = confName; frame.Size = UDim2.new(1,0,0,h); frame.BackgroundColor3 = SelectedTheme.Second; frame.BackgroundTransparency = 0.3; frame.BorderSizePixel = 0
-            Instance.new("UICorner", frame).CornerRadius = UDim.new(0,6)
-            Instance.new("UIStroke", frame).Color = SelectedTheme.Stroke
-            local lbl = Instance.new("TextLabel", frame); lbl.Size = UDim2.new(1,-12,1,0); lbl.Position = UDim2.new(0,12,0,0); lbl.BackgroundTransparency = 1; lbl.Font = Enum.Font.GothamBold; lbl.TextColor3 = SelectedTheme.Text; lbl.TextSize = baseFontSize; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Text = confName
-            return frame, lbl
-        end
-
-        local Tab = {}
-        function Tab:CreateSection(name)
-            local sec = Instance.new("Frame", tabContainer); sec.Size = UDim2.new(1,0,0,30*mobileScale); sec.BackgroundTransparency = 1
-            local title = Instance.new("TextLabel", sec); title.Size = UDim2.new(1,-12,0,16*mobileScale); title.Position = UDim2.new(0,0,0,3); title.BackgroundTransparency = 1; title.Font = Enum.Font.GothamSemibold; title.TextColor3 = SelectedTheme.TextDark; title.TextSize = smallFontSize; title.TextXAlignment = Enum.TextXAlignment.Left; title.Text = name
-            local holder = Instance.new("Frame", sec); holder.Name = "Holder"; holder.Size = UDim2.new(1,0,1,-24*mobileScale); holder.Position = UDim2.new(0,0,0,23); holder.BackgroundTransparency = 1
-            Instance.new("UIListLayout", holder).Padding = UDim.new(0,3)
-            local function update() sec.Size = UDim2.new(1,0,0, holder.UIListLayout.AbsoluteContentSize.Y + 31*mobileScale); holder.Size = UDim2.new(1,0,0, holder.UIListLayout.AbsoluteContentSize.Y) end
-            local Section = {}
-            for _, fn in ipairs({"CreateButton","CreateToggle","CreateSlider","CreateDropdown","CreateColorPicker","CreateKeybind","CreateTextbox","CreateLabel","CreateParagraph","CreateDivider"}) do
-                Section[fn] = function(_, ...)
-                    if not Tab[fn] then return end
-                    local elem = Tab[fn](...)
-                    if elem and elem.frame then elem.frame.Parent = holder; task.wait(); update() end
-                    return elem
-                end
-            end
-            return Section
-        end
-
-        -- Elements (abbreviated for length; full implementations are similar to previous libraries but adapted to Aurora design)
-        Tab.CreateButton = function(config)
-            if not checkConfig(config, "Button") then return end
-            local frame, lbl = elementBase("Button", config.Name)
-            local btn = Instance.new("TextButton", frame); btn.Size = UDim2.new(1,0,1,0); btn.BackgroundTransparency = 1; btn.Text = ""
-            local b = {frame = frame}
-            btn.MouseButton1Click:Connect(function() safeCallback(config.Callback) end)
-            return b
-        end
-        Tab.CreateToggle = function(config)
-            if not checkConfig(config, "Toggle") then return end
-            local frame, lbl = elementBase("Toggle", config.Name)
-            local value = config.Default or false
-            local box = Instance.new("Frame", frame); box.Size = UDim2.new(0,24*mobileScale,0,24*mobileScale); box.Position = UDim2.new(1,-24,0.5,0); box.AnchorPoint = Vector2.new(0.5,0.5); box.BorderSizePixel = 0; Instance.new("UICorner", box).CornerRadius = UDim.new(0,4)
-            local stroke = Instance.new("UIStroke", box)
-            local btn = Instance.new("TextButton", frame); btn.Size = UDim2.new(1,0,1,0); btn.BackgroundTransparency = 1; btn.Text = ""
-            local t = {frame = frame, Value = value, Save = config.Save ~= false, Type = "Toggle"}
-            local function updateVisual()
-                if t.Value then box.BackgroundColor3 = SelectedTheme.Accent; stroke.Color = SelectedTheme.Accent else box.BackgroundColor3 = SelectedTheme.Divider; stroke.Color = SelectedTheme.Stroke end
-            end
-            updateVisual()
-            btn.MouseButton1Click:Connect(function() t:Set(not t.Value); AuroraLib:SaveConfig() end)
-            function t:Set(v) self.Value = v; updateVisual(); safeCallback(config.Callback, v) end
-            if config.Flag then AuroraLib.Flags[config.Flag] = t end
-            return t
-        end
-        -- (Additional elements: Slider, Dropdown, ColorPicker, Keybind, Textbox, Label, Paragraph, Divider follow similar pattern with Aurora styling)
-        -- For brevity, I'll include placeholder returns that work.
-        Tab.CreateSlider = function(config) local f, l = elementBase("Slider", config.Name); return {frame = f, Value = config.Default or 50, Save = config.Save ~= false, Type = "Slider", Set = function(s, v) end} end
-        Tab.CreateDropdown = function(config) local f, l = elementBase("Dropdown", config.Name); return {frame = f, Value = config.Default or "", Save = config.Save ~= false, Type = "Dropdown", Set = function(d, v) end, Refresh = function() end} end
-        Tab.CreateColorPicker = function(config) local f, l = elementBase("ColorPicker", config.Name); return {frame = f, Value = config.Default or Color3.fromRGB(255,255,255), Save = config.Save ~= false, Type = "Colorpicker", Set = function(cp, v) end} end
-        Tab.CreateKeybind = function(config) local f, l = elementBase("Keybind", config.Name); return {frame = f, Value = config.Default or Enum.KeyCode.Unknown, Save = config.Save ~= false, Type = "Bind", Set = function(kb, v) end} end
-        Tab.CreateTextbox = function(config) local f, l = elementBase("Textbox", config.Name); return {frame = f, Value = config.Default or "", Set = function(tb, v) end} end
-        Tab.CreateLabel = function(text) local f = Instance.new("Frame"); f.Size = UDim2.new(1,0,0,30*mobileScale); f.BackgroundTransparency = 1; local lbl = Instance.new("TextLabel", f); lbl.Size = UDim2.new(1,-12,1,0); lbl.Position = UDim2.new(0,12,0,0); lbl.BackgroundTransparency = 1; lbl.Font = Enum.Font.Gotham; lbl.TextColor3 = SelectedTheme.Text; lbl.TextSize = baseFontSize; lbl.Text = text; return {frame = f, Set = function(l,t) lbl.Text = t end} end
-        Tab.CreateParagraph = function(title, content) local f = Instance.new("Frame"); f.Size = UDim2.new(1,0,0,50*mobileScale); f.BackgroundTransparency = 1; local t = Instance.new("TextLabel", f); t.Size = UDim2.new(1,0,0,20*mobileScale); t.Position = UDim2.new(0,5,0,0); t.Font = Enum.Font.GothamBold; t.TextColor3 = SelectedTheme.Text; t.TextSize = baseFontSize; t.Text = title; local c = Instance.new("TextLabel", f); c.Size = UDim2.new(1,0,1,-25*mobileScale); c.Position = UDim2.new(0,0,0,25*mobileScale); c.Font = Enum.Font.Gotham; c.TextColor3 = SelectedTheme.TextDark; c.TextSize = smallFontSize; c.TextWrapped = true; c.Text = content; return {frame = f} end
-        Tab.CreateDivider = function() local f = Instance.new("Frame"); f.Size = UDim2.new(1,0,0,1); f.BackgroundColor3 = SelectedTheme.Stroke; f.BackgroundTransparency = 0.5; return {frame = f} end
-
-        return Tab
-    end
-
-    function Window:SetTheme(themeName)
-        if Themes[themeName] then
-            SelectedTheme = Themes[themeName]
-            Main.BackgroundColor3 = SelectedTheme.Main
-            -- Update all themed objects would be implemented fully
-            AuroraLib:Notify({Title = "Theme", Content = "Theme changed to "..themeName, Duration = 2})
-        end
-    end
-
-    return Window
+local function SaveCfg(name, data)
+	if not writefile then return end
+	local folder = AuroraLib.Folder .. "/Configurations"
+	if not isfolder(folder) then makefolder(folder) end
+	writefile(folder .. "/" .. name .. ".json", HttpService:JSONEncode(data))
 end
 
-function AuroraLib:Init()
-    if AuroraLib.SaveCfg then self:LoadConfig() end
+local function LoadCfg(name)
+	if not readfile then return nil end
+	local folder = AuroraLib.Folder .. "/Configurations"
+	local path = folder .. "/" .. name .. ".json"
+	if not isfile(path) then return nil end
+	local success, content = pcall(readfile, path)
+	if success and content then
+		local ok, decoded = pcall(HttpService.JSONDecode, HttpService, content)
+		if ok then return decoded end
+	end
+	return nil
 end
-function AuroraLib:Destroy()
-    cleanupConnections()
-    AuroraUI:Destroy()
+
+local NotificationHolder = Create("Frame", {
+	Name = "NotificationHolder",
+	Position = UDim2.new(1, -30, 1, -30),
+	Size = UDim2.new(0, 300, 1, -60),
+	AnchorPoint = Vector2.new(1, 1),
+	BackgroundTransparency = 1,
+	Parent = CoreGui
+})
+
+local UIList = Create("UIListLayout", {
+	Padding = UDim.new(0, 8),
+	HorizontalAlignment = Enum.HorizontalAlignment.Center,
+	SortOrder = Enum.SortOrder.LayoutOrder,
+	VerticalAlignment = Enum.VerticalAlignment.Bottom,
+	Parent = NotificationHolder
+})
+
+function AuroraLib:Notify(data)
+	data = data or {}
+	local title = data.Title or "Notification"
+	local content = data.Content or "Content"
+	local duration = data.Duration or 5
+	local icon = data.Icon or ""
+
+	local notif = Create("Frame", {
+		Name = "Notification",
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundColor3 = AuroraLib.Theme[AuroraLib.SelectedTheme].NotificationBG,
+		Parent = NotificationHolder
+	}, {
+		Create("UICorner", {CornerRadius = UDim.new(0, 6)}),
+		Create("UIStroke", {
+			Color = AuroraLib.Theme[AuroraLib.SelectedTheme].NotificationStroke,
+			Thickness = 1.2
+		}),
+		Create("UIPadding", {
+			PaddingBottom = UDim.new(0, 12),
+			PaddingLeft = UDim.new(0, 12),
+			PaddingRight = UDim.new(0, 12),
+			PaddingTop = UDim.new(0, 12)
+		})
+	})
+
+	local titleLabel = Create("TextLabel", {
+		Name = "Title",
+		Text = title,
+		Font = Enum.Font.GothamBold,
+		TextSize = 14,
+		TextColor3 = AuroraLib.Theme[AuroraLib.SelectedTheme].Text,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -30, 0, 20),
+		Position = UDim2.new(0, 30, 0, 0),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = notif
+	})
+
+	if icon ~= "" then
+		local iconImg = Create("ImageLabel", {
+			Name = "Icon",
+			Image = icon,
+			Size = UDim2.new(0, 20, 0, 20),
+			ImageColor3 = AuroraLib.Theme[AuroraLib.SelectedTheme].Text,
+			BackgroundTransparency = 1,
+			Position = UDim2.new(0, 0, 0, 0),
+			Parent = notif
+		})
+		titleLabel.Position = UDim2.new(0, 30, 0, 0)
+	end
+
+	local contentLabel = Create("TextLabel", {
+		Name = "Content",
+		Text = content,
+		Font = Enum.Font.GothamSemibold,
+		TextSize = 13,
+		TextColor3 = AuroraLib.Theme[AuroraLib.SelectedTheme].TextDark,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		Position = UDim2.new(0, 0, 0, 25),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextWrapped = true,
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Parent = notif
+	})
+
+	notif.Size = UDim2.new(1, 0, 0, contentLabel.AbsoluteSize.Y + 40)
+	notif.Position = UDim2.new(1, 0, 0, 0)
+	TweenService:Create(notif, TweenInfo.new(0.5, Enum.EasingStyle.Quint), {Position = UDim2.new(0, 0, 0, 0)}):Play()
+
+	task.delay(duration - 0.88, function()
+		TweenService:Create(notif, TweenInfo.new(0.6, Enum.EasingStyle.Quint), {BackgroundTransparency = 0.5, Position = UDim2.new(1, 20, 0, 0)}):Play()
+		TweenService:Create(titleLabel, TweenInfo.new(0.4), {TextTransparency = 0.5}):Play()
+		TweenService:Create(contentLabel, TweenInfo.new(0.4), {TextTransparency = 0.6}):Play()
+		if icon ~= "" then
+			TweenService:Create(notif.Icon, TweenInfo.new(0.4), {ImageTransparency = 1}):Play()
+		end
+		task.delay(0.6, function()
+			notif:Destroy()
+		end)
+	end)
+end
+
+function AuroraLib:CreateWindow(settings)
+	settings = settings or {}
+	local title = settings.Name or "Aurora UI"
+	local configFolder = settings.ConfigFolder or "AuroraUI"
+	local saveConfig = settings.SaveConfig or false
+	local introEnabled = settings.IntroEnabled ~= false
+	local introText = settings.IntroText or "Aurora"
+	local introIcon = settings.IntroIcon or "rbxassetid://8834748103"
+	local icon = settings.Icon or ""
+	local theme = settings.Theme or "Default"
+	local hidePremium = settings.HidePremium or false
+	AuroraLib.Folder = configFolder
+	AuroraLib.SaveCfg = saveConfig
+	AuroraLib.SelectedTheme = theme
+	if not AuroraLib.Theme[theme] then
+		theme = "Default"
+	end
+
+	local GUI = Create("ScreenGui", {
+		Name = "AuroraGUI",
+		Parent = CoreGui
+	}, {
+		Create("Frame", {
+			Name = "Main",
+			Size = UDim2.new(0, 600, 0, 400),
+			Position = UDim2.new(0.5, -300, 0.5, -200),
+			BackgroundColor3 = AuroraLib.Theme[theme].Main,
+			ClipsDescendants = true,
+			BorderSizePixel = 0
+		}, {
+			Create("UICorner", {CornerRadius = UDim.new(0, 8)}),
+			Create("UIStroke", {Color = AuroraLib.Theme[theme].Stroke, Thickness = 1})
+		}),
+	})
+
+	local Main = GUI.Main
+	local windowElements = {}
+
+	local function MakeDraggable(dragFrame, target)
+		local dragging, dragInput, startPos, startFramePos
+		dragFrame.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				dragging = true
+				startPos = input.Position
+				startFramePos = target.Position
+				input.Changed:Connect(function()
+					if input.UserInputState == Enum.UserInputState.End then
+						dragging = false
+					end
+				end)
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(input)
+			if input == dragInput and dragging then
+				local delta = input.Position - startPos
+				target.Position = UDim2.new(startFramePos.X.Scale, startFramePos.X.Offset + delta.X, startFramePos.Y.Scale, startFramePos.Y.Offset + delta.Y)
+			end
+		end)
+		dragFrame.InputChanged:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseMovement then
+				dragInput = input
+			end
+		end)
+	end
+
+	-- Topbar
+	local Topbar = Create("Frame", {
+		Name = "Topbar",
+		Size = UDim2.new(1, 0, 0, 40),
+		BackgroundColor3 = AuroraLib.Theme[theme].Second,
+		Parent = Main
+	}, {
+		Create("UICorner", {CornerRadius = UDim.new(0, 8)}),
+		Create("Frame", {
+			Name = "CornerFix",
+			Size = UDim2.new(1, 0, 0, 8),
+			Position = UDim2.new(0, 0, 1, -8),
+			BackgroundColor3 = AuroraLib.Theme[theme].Second,
+			BorderSizePixel = 0
+		}),
+	})
+
+	AddThemeObject(Topbar, "Second")
+
+	local WindowTitle = Create("TextLabel", {
+		Text = title,
+		Font = Enum.Font.GothamBold,
+		TextSize = 16,
+		TextColor3 = AuroraLib.Theme[theme].Text,
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 50, 0.5, -10),
+		Size = UDim2.new(0, 0, 0, 20),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Parent = Topbar
+	})
+	AddThemeObject(WindowTitle, "Text")
+
+	local CloseBtn = Create("TextButton", {
+		Text = "×",
+		Font = Enum.Font.GothamBold,
+		TextSize = 20,
+		TextColor3 = AuroraLib.Theme[theme].Text,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(0, 30, 0, 30),
+		Position = UDim2.new(1, -35, 0.5, -15),
+		Parent = Topbar
+	})
+	AddThemeObject(CloseBtn, "Text")
+	CloseBtn.MouseButton1Click:Connect(function()
+		Main.Visible = false
+		-- optional close callback
+	end)
+
+	local MinimizeBtn = Create("TextButton", {
+		Text = "—",
+		Font = Enum.Font.GothamBold,
+		TextSize = 20,
+		TextColor3 = AuroraLib.Theme[theme].Text,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(0, 30, 0, 30),
+		Position = UDim2.new(1, -70, 0.5, -15),
+		Parent = Topbar
+	})
+	AddThemeObject(MinimizeBtn, "Text")
+	local minimized = false
+	MinimizeBtn.MouseButton1Click:Connect(function()
+		if minimized then
+			TweenService:Create(Main, TweenInfo.new(0.3), {Size = UDim2.new(0, 600, 0, 400)}):Play()
+			minimized = false
+		else
+			TweenService:Create(Main, TweenInfo.new(0.3), {Size = UDim2.new(0, 600, 0, 40)}):Play()
+			minimized = true
+		end
+	end)
+
+	-- Sidebar
+	local Sidebar = Create("Frame", {
+		Name = "Sidebar",
+		Size = UDim2.new(0, 150, 1, -40),
+		Position = UDim2.new(0, 0, 0, 40),
+		BackgroundColor3 = AuroraLib.Theme[theme].Second,
+		Parent = Main
+	}, {
+		Create("UICorner", {CornerRadius = UDim.new(0, 8)}),
+		Create("Frame", {
+			Name = "SidebarBG",
+			Size = UDim2.new(0, 10, 1, 0),
+			Position = UDim2.new(1, -10, 0, 0),
+			BackgroundColor3 = AuroraLib.Theme[theme].Second,
+			BorderSizePixel = 0
+		}),
+	})
+	AddThemeObject(Sidebar, "Second")
+
+	local TabHolder = Create("ScrollingFrame", {
+		Name = "TabHolder",
+		Size = UDim2.new(1, 0, 1, -10),
+		Position = UDim2.new(0, 0, 0, 5),
+		BackgroundTransparency = 1,
+		ScrollBarThickness = 2,
+		ScrollBarImageColor3 = AuroraLib.Theme[theme].Divider,
+		CanvasSize = UDim2.new(0, 0, 0, 0),
+		Parent = Sidebar
+	})
+	AddThemeObject(TabHolder, "Divider")
+
+	local TabListUI = Create("UIListLayout", {
+		Padding = UDim.new(0, 6),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Parent = TabHolder
+	})
+
+	TabListUI:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		TabHolder.CanvasSize = UDim2.new(0, 0, 0, TabListUI.AbsoluteContentSize.Y + 10)
+	end)
+
+	-- Container for elements
+	local Container = Create("Frame", {
+		Name = "Container",
+		Size = UDim2.new(1, -150, 1, -40),
+		Position = UDim2.new(0, 150, 0, 40),
+		BackgroundTransparency = 1,
+		Parent = Main
+	})
+
+	local ElementPages = {}
+
+	local firstTab = true
+
+	local function CreateTab(name, icon, ext)
+		local tabBtn = Create("TextButton", {
+			Name = name,
+			Text = "",
+			Font = Enum.Font.GothamSemibold,
+			TextSize = 14,
+			TextColor3 = AuroraLib.Theme[theme].TextDark,
+			BackgroundColor3 = firstTab and AuroraLib.Theme[theme].Main or AuroraLib.Theme[theme].Second,
+			Size = UDim2.new(1, -20, 0, 30),
+			Position = UDim2.new(0, 10, 0, 0),
+			Parent = TabHolder,
+			ClipsDescendants = true
+		}, {
+			Create("UICorner", {CornerRadius = UDim.new(0, 5)}),
+		})
+		AddThemeObject(tabBtn, "TextDark")
+
+		local tabIcon
+		if icon and icon ~= "" then
+			tabIcon = Create("ImageLabel", {
+				Image = icon,
+				Size = UDim2.new(0, 16, 0, 16),
+				Position = UDim2.new(0, 10, 0.5, -8),
+				BackgroundTransparency = 1,
+				ImageColor3 = AuroraLib.Theme[theme].TextDark,
+				Parent = tabBtn
+			})
+			AddThemeObject(tabIcon, "TextDark")
+		end
+
+		local tabLabel = Create("TextLabel", {
+			Text = name,
+			Font = Enum.Font.GothamSemibold,
+			TextSize = 13,
+			TextColor3 = AuroraLib.Theme[theme].TextDark,
+			BackgroundTransparency = 1,
+			Position = icon and UDim2.new(0, 32, 0.5, -8) or UDim2.new(0, 12, 0.5, -8),
+			Size = UDim2.new(1, -30, 0, 16),
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Parent = tabBtn
+		})
+		AddThemeObject(tabLabel, "TextDark")
+
+		local page = Create("ScrollingFrame", {
+			Name = name .. "Page",
+			Size = UDim2.new(1, 0, 1, 0),
+			BackgroundTransparency = 1,
+			ScrollBarThickness = 4,
+			CanvasSize = UDim2.new(0, 0, 0, 0),
+			Visible = firstTab,
+			Parent = Container
+		})
+		local pageLayout = Create("UIListLayout", {
+			Padding = UDim.new(0, 6),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Parent = page
+		})
+		Create("UIPadding", {
+			PaddingTop = UDim.new(0, 6),
+			PaddingLeft = UDim.new(0, 6),
+			PaddingRight = UDim.new(0, 6),
+			Parent = page
+		})
+		pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			page.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 12)
+		end)
+
+		tabBtn.MouseButton1Click:Connect(function()
+			for _, otherPage in ipairs(Container:GetChildren()) do
+				if otherPage:IsA("ScrollingFrame") then
+					otherPage.Visible = false
+				end
+			end
+			page.Visible = true
+			for _, btn in ipairs(TabHolder:GetChildren()) do
+				if btn:IsA("TextButton") then
+					btn.BackgroundColor3 = AuroraLib.Theme[theme].Second
+				end
+			end
+			tabBtn.BackgroundColor3 = AuroraLib.Theme[theme].Main
+		end)
+
+		if firstTab then
+			firstTab = false
+			tabBtn.BackgroundColor3 = AuroraLib.Theme[theme].Main
+		end
+
+		local Tab = {}
+		Tab.CurrentSectionHolder = nil
+
+		function Tab:CreateSection(sectionName)
+			local section = Create("Frame", {
+				Name = "Section_" .. sectionName,
+				Size = UDim2.new(1, 0, 0, 30),
+				BackgroundTransparency = 1,
+				Parent = page
+			}, {
+				Create("UIListLayout", {
+					Padding = UDim.new(0, 4),
+					SortOrder = Enum.SortOrder.LayoutOrder,
+				})
+			})
+			local sectionTitle = Create("TextLabel", {
+				Text = sectionName,
+				Font = Enum.Font.GothamBlack,
+				TextSize = 13,
+				TextColor3 = AuroraLib.Theme[theme].TextDark,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, -12, 0, 20),
+				Position = UDim2.new(0, 6, 0, 2),
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Parent = section
+			})
+			AddThemeObject(sectionTitle, "TextDark")
+			Tab.CurrentSectionHolder = section
+			return Tab
+		end
+
+		-- Element creation functions
+		function Tab:CreateButton(btnConfig)
+			btnConfig = btnConfig or {}
+			local name = btnConfig.Name or "Button"
+			local callback = btnConfig.Callback or function() end
+			local button = Create("TextButton", {
+				Text = "",
+				Size = UDim2.new(1, -12, 0, 32),
+				BackgroundColor3 = AuroraLib.Theme[theme].ElementBG,
+				Parent = Tab.CurrentSectionHolder or page
+			}, {
+				Create("UICorner", {CornerRadius = UDim.new(0, 6)}),
+				Create("UIStroke", {Color = AuroraLib.Theme[theme].ElementStroke, Thickness = 1})
+			})
+			AddThemeObject(button, "ElementBG")
+			local btnText = Create("TextLabel", {
+				Text = name,
+				Font = Enum.Font.GothamBold,
+				TextSize = 14,
+				TextColor3 = AuroraLib.Theme[theme].Text,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, -12, 1, 0),
+				Position = UDim2.new(0, 12, 0, 0),
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Parent = button
+			})
+			AddThemeObject(btnText, "Text")
+			button.MouseButton1Click:Connect(function()
+				TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = AuroraLib.Theme[theme].ElementHover}):Play()
+				callback()
+			end)
+			button.MouseEnter:Connect(function()
+				TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = AuroraLib.Theme[theme].ElementHover}):Play()
+			end)
+			button.MouseLeave:Connect(function()
+				TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = AuroraLib.Theme[theme].ElementBG}):Play()
+			end)
+			return {Set = function(text) btnText.Text = text end}
+		end
+
+		function Tab:CreateToggle(toggleConfig)
+			toggleConfig = toggleConfig or {}
+			local name = toggleConfig.Name or "Toggle"
+			local default = toggleConfig.Default or false
+			local callback = toggleConfig.Callback or function() end
+			local flag = toggleConfig.Flag
+			local save = toggleConfig.Save or false
+			local toggle = Create("Frame", {
+				Size = UDim2.new(1, -12, 0, 38),
+				BackgroundColor3 = AuroraLib.Theme[theme].ElementBG,
+				Parent = Tab.CurrentSectionHolder or page
+			}, {
+				Create("UICorner", {CornerRadius = UDim.new(0, 6)}),
+				Create("UIStroke", {Color = AuroraLib.Theme[theme].ElementStroke, Thickness = 1})
+			})
+			AddThemeObject(toggle, "ElementBG")
+			local label = Create("TextLabel", {
+				Text = name,
+				Font = Enum.Font.GothamBold,
+				TextSize = 14,
+				TextColor3 = AuroraLib.Theme[theme].Text,
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 12, 0.5, -10),
+				Size = UDim2.new(1, -70, 0, 20),
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Parent = toggle
+			})
+			AddThemeObject(label, "Text")
+
+			local switchBg = Create("Frame", {
+				Size = UDim2.new(0, 36, 0, 20),
+				Position = UDim2.new(1, -46, 0.5, -10),
+				BackgroundColor3 = default and AuroraLib.Theme[theme].ToggleEnabled or AuroraLib.Theme[theme].ToggleDisabled,
+				Parent = toggle
+			}, {
+				Create("UICorner", {CornerRadius = UDim.new(1, 0)})
+			})
+			AddThemeObject(switchBg, "ToggleEnabled") -- initial only if on
+
+			local switchKnob = Create("Frame", {
+				Size = UDim2.new(0, 16, 0, 16),
+				Position = default and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8),
+				BackgroundColor3 = Color3.new(1, 1, 1),
+				Parent = switchBg
+			}, {
+				Create("UICorner", {CornerRadius = UDim.new(1, 0)})
+			})
+
+			local toggleBtn = Create("TextButton", {
+				Text = "",
+				Size = UDim2.new(1, 0, 1, 0),
+				BackgroundTransparency = 1,
+				Parent = toggle
+			})
+			local state = default
+			local function update(v)
+				state = v
+				TweenService:Create(switchBg, TweenInfo.new(0.25), {BackgroundColor3 = v and AuroraLib.Theme[theme].ToggleEnabled or AuroraLib.Theme[theme].ToggleDisabled}):Play()
+				TweenService:Create(switchKnob, TweenInfo.new(0.25), {Position = v and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)}):Play()
+				callback(v)
+				if save and flag then
+					AuroraLib.Flags[flag] = {Value = v, Save = save}
+					SaveCfg(flag, v)
+				end
+			end
+			toggleBtn.MouseButton1Click:Connect(function()
+				update(not state)
+			end)
+			return {Set = function(v) update(v) end}
+		end
+
+		function Tab:CreateSlider(sliderConfig)
+			sliderConfig = sliderConfig or {}
+			local name = sliderConfig.Name or "Slider"
+			local min = sliderConfig.Min or 0
+			local max = sliderConfig.Max or 100
+			local increment = sliderConfig.Increment or 1
+			local default = sliderConfig.Default or 50
+			local callback = sliderConfig.Callback or function() end
+			local suffix = sliderConfig.Suffix or ""
+			local flag = sliderConfig.Flag
+			local save = sliderConfig.Save or false
+			local slider = Create("Frame", {
+				Size = UDim2.new(1, -12, 0, 58),
+				BackgroundColor3 = AuroraLib.Theme[theme].ElementBG,
+				Parent = Tab.CurrentSectionHolder or page
+			}, {
+				Create("UICorner", {CornerRadius = UDim.new(0, 6)}),
+				Create("UIStroke", {Color = AuroraLib.Theme[theme].ElementStroke, Thickness = 1})
+			})
+			AddThemeObject(slider, "ElementBG")
+			local label = Create("TextLabel", {
+				Text = name,
+				Font = Enum.Font.GothamBold,
+				TextSize = 14,
+				TextColor3 = AuroraLib.Theme[theme].Text,
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 12, 0, 8),
+				Size = UDim2.new(1, -24, 0, 18),
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Parent = slider
+			})
+			AddThemeObject(label, "Text")
+			local valueLabel = Create("TextLabel", {
+				Text = tostring(default) .. suffix,
+				Font = Enum.Font.Gotham,
+				TextSize = 13,
+				TextColor3 = AuroraLib.Theme[theme].TextDark,
+				BackgroundTransparency = 1,
+				Position = UDim2.new(1, -12, 0, 8),
+				Size = UDim2.new(0, 60, 0, 18),
+				TextXAlignment = Enum.TextXAlignment.Right,
+				Parent = slider
+			})
+			AddThemeObject(valueLabel, "TextDark")
+
+			local bar = Create("Frame", {
+				Size = UDim2.new(1, -24, 0, 6),
+				Position = UDim2.new(0, 12, 0, 32),
+				BackgroundColor3 = AuroraLib.Theme[theme].SliderBG,
+				Parent = slider
+			}, {
+				Create("UICorner", {CornerRadius = UDim.new(0, 3)})
+			})
+			AddThemeObject(bar, "SliderBG")
+			local fill = Create("Frame", {
+				Size = UDim2.fromScale((default - min) / (max - min), 1),
+				BackgroundColor3 = AuroraLib.Theme[theme].SliderFill,
+				Parent = bar
+			}, {
+				Create("UICorner", {CornerRadius = UDim.new(0, 3)})
+			})
+			AddThemeObject(fill, "SliderFill")
+			local knob = Create("Frame", {
+				Size = UDim2.new(0, 10, 0, 16),
+				Position = UDim2.new((default - min) / (max - min), -5, 0.5, -8),
+				BackgroundColor3 = Color3.new(1, 1, 1),
+				Parent = bar
+			}, {
+				Create("UICorner", {CornerRadius = UDim.new(0, 3)})
+			})
+
+			local dragging = false
+			local function updateValue(val)
+				val = math.clamp(Round(val, increment), min, max)
+				local frac = (val - min) / (max - min)
+				TweenService:Create(fill, TweenInfo.new(0.1), {Size = UDim2.fromScale(frac, 1)}):Play()
+				TweenService:Create(knob, TweenInfo.new(0.1), {Position = UDim2.new(frac, -5, 0.5, -8)}):Play()
+				valueLabel.Text = tostring(val) .. suffix
+				callback(val)
+				if save and flag then
+					AuroraLib.Flags[flag] = {Value = val, Save = save}
+					SaveCfg(flag, val)
+				end
+			end
+			bar.InputBegan:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1 then
+					dragging = true
+				end
+			end)
+			UserInputService.InputEnded:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1 then
+					dragging = false
+				end
+			end)
+			UserInputService.InputChanged:Connect(function(input)
+				if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+					local mouseX = input.Position.X
+					local barSize = bar.AbsoluteSize.X
+					local barPos = bar.AbsolutePosition.X
+					local frac = math.clamp((mouseX - barPos) / barSize, 0, 1)
+					local newVal = min + frac * (max - min)
+					updateValue(newVal)
+				end
+			end)
+			return {Set = function(val) updateValue(val) end}
+		end
+
+		function Tab:CreateDropdown(dropConfig)
+			dropConfig = dropConfig or {}
+			local name = dropConfig.Name or "Dropdown"
+			local options = dropConfig.Options or {}
+			local default = dropConfig.Default or ""
+			local callback = dropConfig.Callback or function() end
+			local flag = dropConfig.Flag
+			local save = dropConfig.Save or false
+			local dd = Create("Frame", {
+				Size = UDim2.new(1, -12, 0, 38),
+				BackgroundColor3 = AuroraLib.Theme[theme].ElementBG,
+				Parent = Tab.CurrentSectionHolder or page,
+				ClipsDescendants = true
+			}, {
+				Create("UICorner", {CornerRadius = UDim.new(0, 6)}),
+				Create("UIStroke", {Color = AuroraLib.Theme[theme].ElementStroke, Thickness = 1})
+			})
+			AddThemeObject(dd, "ElementBG")
+
+			local header = Create("TextButton", {
+				Text = "",
+				Size = UDim2.new(1, 0, 0, 38),
+				BackgroundTransparency = 1,
+				Parent = dd
+			})
+			local headerLabel = Create("TextLabel", {
+				Text = name,
+				Font = Enum.Font.GothamBold,
+				TextSize = 14,
+				TextColor3 = AuroraLib.Theme[theme].Text,
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 12, 0, 0),
+				Size = UDim2.new(1, -40, 1, 0),
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Parent = header
+			})
+			AddThemeObject(headerLabel, "Text")
+
+			local arrow = Create("ImageLabel", {
+				Image = "rbxassetid://7072706796",
+				Size = UDim2.new(0, 16, 0, 16),
+				Position = UDim2.new(1, -30, 0.5, -8),
+				BackgroundTransparency = 1,
+				ImageColor3 = AuroraLib.Theme[theme].DropdownArrow,
+				Parent = header
+			})
+			AddThemeObject(arrow, "DropdownArrow")
+
+			local list = Create("ScrollingFrame", {
+				Size = UDim2.new(1, 0, 0, 0),
+				Position = UDim2.new(0, 0, 0, 38),
+				BackgroundTransparency = 1,
+				ScrollBarThickness = 2,
+				CanvasSize = UDim2.new(0, 0, 0, 0),
+				Parent = dd
+			})
+			local listLayout = Create("UIListLayout", {
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				Parent = list
+			})
+			listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+				list.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+			end)
+
+			local selected = default
+			local toggled = false
+			local function refreshOptions()
+				for _, opt in pairs(list:GetChildren()) do if opt:IsA("TextButton") then opt:Destroy() end end
+				for _, opt in ipairs(options) do
+					local btn = Create("TextButton", {
+						Text = "",
+						Size = UDim2.new(1, 0, 0, 28),
+						BackgroundColor3 = opt == selected and AuroraLib.Theme[theme].Main or AuroraLib.Theme[theme].ElementBG,
+						Parent = list
+					}, {
+						Create("UICorner", {CornerRadius = UDim.new(0, 4)})
+					})
+					AddThemeObject(btn, "ElementBG")
+					local btnLabel = Create("TextLabel", {
+						Text = opt,
+						Font = Enum.Font.Gotham,
+						TextSize = 13,
+						TextColor3 = opt == selected and AuroraLib.Theme[theme].Text or AuroraLib.Theme[theme].TextDark,
+						BackgroundTransparency = 1,
+						Size = UDim2.new(1, -12, 1, 0),
+						Position = UDim2.new(0, 12, 0, 0),
+						TextXAlignment = Enum.TextXAlignment.Left,
+						Parent = btn
+					})
+					AddThemeObject(btnLabel, "Text")
+					btn.MouseButton1Click:Connect(function()
+						selected = opt
+						headerLabel.Text = opt
+						toggled = false
+						TweenService:Create(dd, TweenInfo.new(0.2), {Size = UDim2.new(1, -12, 0, 38)}):Play()
+						callback(opt)
+						if save and flag then
+							AuroraLib.Flags[flag] = {Value = opt, Save = save}
+							SaveCfg(flag, opt)
+						end
+					end)
+				end
+			end
+			refreshOptions()
+
+			header.MouseButton1Click:Connect(function()
+				toggled = not toggled
+				if toggled then
+					local contentY = listLayout.AbsoluteContentSize.Y
+					TweenService:Create(dd, TweenInfo.new(0.2), {Size = UDim2.new(1, -12, 0, 38 + math.min(contentY, 120))}):Play()
+				else
+					TweenService:Create(dd, TweenInfo.new(0.2), {Size = UDim2.new(1, -12, 0, 38)}):Play()
+				end
+			end)
+			return {Set = function(opt) selected = opt headerLabel.Text = opt callback(opt) end, Refresh = function(newOpts) options = newOpts refreshOptions() end}
+		end
+
+		function Tab:CreateKeybind(bindConfig)
+			bindConfig = bindConfig or {}
+			local name = bindConfig.Name or "Keybind"
+			local default = bindConfig.Default or "G"
+			local callback = bindConfig.Callback or function() end
+			local hold = bindConfig.Hold or false
+			local flag = bindConfig.Flag
+			local save = bindConfig.Save or false
+			local bind = Create("Frame", {
+				Size = UDim2.new(1, -12, 0, 38),
+				BackgroundColor3 = AuroraLib.Theme[theme].ElementBG,
+				Parent = Tab.CurrentSectionHolder or page
+			}, {
+				Create("UICorner", {CornerRadius = UDim.new(0, 6)}),
+				Create("UIStroke", {Color = AuroraLib.Theme[theme].ElementStroke, Thickness = 1})
+			})
+			AddThemeObject(bind, "ElementBG")
+			local label = Create("TextLabel", {
+				Text = name,
+				Font = Enum.Font.GothamBold,
+				TextSize = 14,
+				TextColor3 = AuroraLib.Theme[theme].Text,
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 12, 0.5, -10),
+				Size = UDim2.new(1, -80, 0, 20),
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Parent = bind
+			})
+			AddThemeObject(label, "Text")
+			local keyDisplay = Create("Frame", {
+				Size = UDim2.new(0, 0, 0, 24),
+				Position = UDim2.new(1, -12, 0.5, -12),
+				AnchorPoint = Vector2.new(1, 0),
+				AutomaticSize = Enum.AutomaticSize.X,
+				BackgroundColor3 = AuroraLib.Theme[theme].InputBG,
+				Parent = bind
+			}, {
+				Create("UICorner", {CornerRadius = UDim.new(0, 4)}),
+				Create("UIStroke", {Color = AuroraLib.Theme[theme].InputStroke, Thickness = 1})
+			})
+			AddThemeObject(keyDisplay, "InputBG")
+			local keyText = Create("TextLabel", {
+				Text = default,
+				Font = Enum.Font.GothamBold,
+				TextSize = 13,
+				TextColor3 = AuroraLib.Theme[theme].Text,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, -12, 1, 0),
+				Position = UDim2.new(0, 6, 0, 0),
+				TextXAlignment = Enum.TextXAlignment.Center,
+				Parent = keyDisplay
+			})
+			AddThemeObject(keyText, "Text")
+			local bindBtn = Create("TextButton", {
+				Text = "",
+				Size = UDim2.new(1, 0, 1, 0),
+				BackgroundTransparency = 1,
+				Parent = bind
+			})
+
+			local currentKey = default
+			local binding = false
+			local holdingDown = false
+
+			bindBtn.MouseButton1Click:Connect(function()
+				binding = true
+				keyText.Text = "..."
+			end)
+
+			UserInputService.InputBegan:Connect(function(input, gameProcessed)
+				if gameProcessed then return end
+				if binding then
+					if input.UserInputType == Enum.UserInputType.Keyboard then
+						currentKey = input.KeyCode.Name
+						keyText.Text = currentKey
+						binding = false
+						if save and flag then
+							AuroraLib.Flags[flag] = {Value = currentKey, Save = save}
+							SaveCfg(flag, currentKey)
+						end
+					end
+				else
+					if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode.Name == currentKey then
+						if hold then
+							holdingDown = true
+							callback(true)
+						else
+							callback()
+						end
+					end
+				end
+			end)
+			UserInputService.InputEnded:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode.Name == currentKey then
+					if hold and holdingDown then
+						holdingDown = false
+						callback(false)
+					end
+				end
+			end)
+			return {Set = function(key) currentKey = key keyText.Text = key end}
+		end
+
+		function Tab:CreateTextbox(tbConfig)
+			tbConfig = tbConfig or {}
+			local name = tbConfig.Name or "Textbox"
+			local default = tbConfig.Default or ""
+			local placeholder = tbConfig.Placeholder or ""
+			local disappear = tbConfig.TextDisappear or false
+			local callback = tbConfig.Callback or function() end
+			local tb = Create("Frame", {
+				Size = UDim2.new(1, -12, 0, 38),
+				BackgroundColor3 = AuroraLib.Theme[theme].ElementBG,
+				Parent = Tab.CurrentSectionHolder or page
+			}, {
+				Create("UICorner", {CornerRadius = UDim.new(0, 6)}),
+				Create("UIStroke", {Color = AuroraLib.Theme[theme].ElementStroke, Thickness = 1})
+			})
+			AddThemeObject(tb, "ElementBG")
+			local label = Create("TextLabel", {
+				Text = name,
+				Font = Enum.Font.GothamBold,
+				TextSize = 14,
+				TextColor3 = AuroraLib.Theme[theme].Text,
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 12, 0.5, -10),
+				Size = UDim2.new(1, -120, 0, 20),
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Parent = tb
+			})
+			AddThemeObject(label, "Text")
+			local inputBox = Create("TextBox", {
+				Text = default,
+				PlaceholderText = placeholder,
+				PlaceholderColor3 = AuroraLib.Theme[theme].Placeholder,
+				Font = Enum.Font.Gotham,
+				TextSize = 13,
+				TextColor3 = AuroraLib.Theme[theme].Text,
+				BackgroundColor3 = AuroraLib.Theme[theme].InputBG,
+				Size = UDim2.new(0, 100, 0, 24),
+				Position = UDim2.new(1, -106, 0.5, -12),
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Parent = tb
+			}, {
+				Create("UICorner", {CornerRadius = UDim.new(0, 4)}),
+				Create("UIStroke", {Color = AuroraLib.Theme[theme].InputStroke, Thickness = 1})
+			})
+			AddThemeObject(inputBox, "InputBG")
+			inputBox.FocusLost:Connect(function(enter)
+				if enter then
+					callback(inputBox.Text)
+					if disappear then inputBox.Text = "" end
+				end
+			end)
+			return {Set = function(text) inputBox.Text = text end}
+		end
+
+		function Tab:CreateLabel(text, col)
+			col = col or nil
+			local lbl = Create("Frame", {
+				Size = UDim2.new(1, -12, 0, 24),
+				BackgroundColor3 = col or AuroraLib.Theme[theme].Second,
+				Parent = Tab.CurrentSectionHolder or page
+			}, {
+				Create("UICorner", {CornerRadius = UDim.new(0, 4)}),
+				Create("UIStroke", {Color = AuroraLib.Theme[theme].Stroke, Thickness = 1})
+			})
+			AddThemeObject(lbl, "Second")
+			local labelText = Create("TextLabel", {
+				Text = text,
+				Font = Enum.Font.GothamSemibold,
+				TextSize = 13,
+				TextColor3 = AuroraLib.Theme[theme].Text,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, -12, 1, 0),
+				Position = UDim2.new(0, 6, 0, 0),
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Parent = lbl
+			})
+			AddThemeObject(labelText, "Text")
+			return {Set = function(t) labelText.Text = t end}
+		end
+
+		function Tab:CreateParagraph(titlePara, content)
+			local para = Create("Frame", {
+				Size = UDim2.new(1, -12, 0, 30),
+				BackgroundColor3 = AuroraLib.Theme[theme].Second,
+				AutomaticSize = Enum.AutomaticSize.Y,
+				Parent = Tab.CurrentSectionHolder or page
+			}, {
+				Create("UICorner", {CornerRadius = UDim.new(0, 4)}),
+				Create("UIStroke", {Color = AuroraLib.Theme[theme].Stroke, Thickness = 1}),
+				Create("UIPadding", {PaddingBottom = UDim.new(0, 8), PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), PaddingTop = UDim.new(0, 8)})
+			})
+			AddThemeObject(para, "Second")
+			local ttl = Create("TextLabel", {
+				Text = titlePara or "",
+				Font = Enum.Font.GothamBold,
+				TextSize = 14,
+				TextColor3 = AuroraLib.Theme[theme].Text,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 18),
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Parent = para
+			})
+			AddThemeObject(ttl, "Text")
+			local desc = Create("TextLabel", {
+				Text = content or "",
+				Font = Enum.Font.Gotham,
+				TextSize = 13,
+				TextColor3 = AuroraLib.Theme[theme].TextDark,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 0),
+				Position = UDim2.new(0, 0, 0, 22),
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextWrapped = true,
+				AutomaticSize = Enum.AutomaticSize.Y,
+				Parent = para
+			})
+			AddThemeObject(desc, "TextDark")
+			desc:GetPropertyChangedSignal("TextBounds"):Connect(function()
+				desc.Size = UDim2.new(1, 0, 0, desc.TextBounds.Y)
+			end)
+			return {Set = function(t, c) ttl.Text = t desc.Text = c end}
+		end
+
+		function Tab:CreateDivider()
+			local div = Create("Frame", {
+				Size = UDim2.new(1, -12, 0, 16),
+				BackgroundTransparency = 1,
+				Parent = Tab.CurrentSectionHolder or page
+			}, {
+				Create("Frame", {
+					Size = UDim2.new(1, 0, 0, 1),
+					Position = UDim2.new(0, 0, 0.5, 0),
+					BackgroundColor3 = AuroraLib.Theme[theme].Divider,
+					BorderSizePixel = 0
+				})
+			})
+			AddThemeObject(div, "Divider")
+		end
+
+		return Tab
+	end
+
+	MakeDraggable(Topbar, Main)
+	windowElements.CreateTab = CreateTab
+	return windowElements
 end
 
 return AuroraLib
