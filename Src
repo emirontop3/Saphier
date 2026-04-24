@@ -1,11 +1,10 @@
--- SimpleUI v1.1 - Mobile Support, Robust
+-- SimpleUI v1.2 - Fully fixed, uses Library.Theme everywhere
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
-local Mouse = Players.LocalPlayer:GetMouse()
 
 local Library = {
     Flags = {},
@@ -31,12 +30,8 @@ local Library = {
     SaveCfg = false,
 }
 
--- Safe delay (all executors)
-local function SafeDelay(t, f)
-    delay(t, f)
-end
+local function SafeDelay(t, f) delay(t, f) end
 
--- Create instance
 local function Create(className, properties, children)
     local obj = Instance.new(className)
     for prop, value in pairs(properties or {}) do
@@ -50,21 +45,18 @@ local function Create(className, properties, children)
     return obj
 end
 
--- Tween
 local function Tween(obj, goal, time, easingStyle, easingDirection)
     local tween = TweenService:Create(obj, TweenInfo.new(time or 0.3, easingStyle or Enum.EasingStyle.Quad, easingDirection or Enum.EasingDirection.Out), goal)
     tween:Play()
     return tween
 end
 
--- Add connection + store
 function Library.AddConnection(signal, callback)
     local conn = signal:Connect(callback)
     table.insert(Library.Connections, conn)
     return conn
 end
 
--- Cleanup
 local function Cleanup()
     for _, conn in ipairs(Library.Connections) do
         conn:Disconnect()
@@ -72,7 +64,6 @@ local function Cleanup()
     Library.Connections = {}
 end
 
--- Mobile-safe dragging
 local function MakeDraggable(frame, topbar)
     local dragging, dragStart, startPos
     local function onInputBegan(input)
@@ -98,7 +89,6 @@ local function MakeDraggable(frame, topbar)
     topbar.InputEnded:Connect(onInputEnded)
 end
 
--- Notification system
 local notificationHolder
 function Library:Notify(data)
     if not notificationHolder then
@@ -121,11 +111,11 @@ function Library:Notify(data)
         Parent = notificationHolder,
         Size = UDim2.new(1, 0, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundColor3 = self.Theme.Background,
+        BackgroundColor3 = Library.Theme.Background,
         BorderSizePixel = 0,
     }, {
         Create("UICorner", { CornerRadius = UDim.new(0, 8) }),
-        Create("UIStroke", { Color = self.Theme.Stroke }),
+        Create("UIStroke", { Color = Library.Theme.Stroke }),
         Create("UIPadding", { PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8), PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) }),
         Create("ImageLabel", {
             Size = UDim2.new(0, 20, 0, 20),
@@ -137,7 +127,7 @@ function Library:Notify(data)
             Position = UDim2.new(0, 30, 0, 0),
             Text = data.Title or "Notification",
             Font = Enum.Font.GothamBold,
-            TextColor3 = self.Theme.Text,
+            TextColor3 = Library.Theme.Text,
             BackgroundTransparency = 1,
             TextXAlignment = Enum.TextXAlignment.Left,
         }),
@@ -146,7 +136,7 @@ function Library:Notify(data)
             Position = UDim2.new(0, 0, 0, 25),
             Text = data.Content or "",
             Font = Enum.Font.Gotham,
-            TextColor3 = self.Theme.TextDark,
+            TextColor3 = Library.Theme.TextDark,
             BackgroundTransparency = 1,
             TextWrapped = true,
             AutomaticSize = Enum.AutomaticSize.Y,
@@ -159,7 +149,6 @@ function Library:Notify(data)
     end)
 end
 
--- Config helpers
 local function PackColor(color)
     return {R = math.floor(color.R * 255), G = math.floor(color.G * 255), B = math.floor(color.B * 255)}
 end
@@ -207,7 +196,7 @@ function Library:SaveConfig(name)
     end
 end
 
--- Element functions
+-- Element functions (always use Library.Theme)
 local ElementFunctions = {}
 
 function ElementFunctions:AddButton(data)
@@ -704,7 +693,7 @@ function ElementFunctions:AddColorPicker(data)
     return picker
 end
 
--- Window creation
+-- Window creation (all theme references use Library.Theme)
 function Library:CreateWindow(data)
     local window = {}
     self.SaveCfg = data.SaveConfig or false
@@ -722,18 +711,18 @@ function Library:CreateWindow(data)
         Parent = gui,
         Size = UDim2.new(0, 600, 0, 400),
         Position = UDim2.new(0.5, -300, 0.5, -200),
-        BackgroundColor3 = self.Theme.Background,
+        BackgroundColor3 = Library.Theme.Background,
         BorderSizePixel = 0,
         Name = "Main",
     }, {
         Create("UICorner", { CornerRadius = UDim.new(0, 8) }),
-        Create("UIStroke", { Color = self.Theme.Stroke, Thickness = 1 }),
+        Create("UIStroke", { Color = Library.Theme.Stroke, Thickness = 1 }),
     })
 
     local topbar = Create("Frame", {
         Parent = main,
         Size = UDim2.new(1, 0, 0, 35),
-        BackgroundColor3 = self.Theme.TopBar,
+        BackgroundColor3 = Library.Theme.TopBar,
         Name = "TopBar",
     }, {
         Create("UICorner", { CornerRadius = UDim.new(0, 8) }),
@@ -743,14 +732,14 @@ function Library:CreateWindow(data)
             Position = UDim2.new(0, 35, 0, 7),
             Text = data.Title or "SimpleUI",
             Font = Enum.Font.GothamBold,
-            TextColor3 = self.Theme.Text,
+            TextColor3 = Library.Theme.Text,
             BackgroundTransparency = 1,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextTruncate = Enum.TextTruncate.AtEnd,
         }),
     })
 
-    -- Window controls (close)
+    -- Close button
     local closeBtn = Create("TextButton", {
         Parent = topbar,
         Size = UDim2.new(0, 30, 0, 30),
@@ -777,7 +766,7 @@ function Library:CreateWindow(data)
         Parent = main,
         Size = UDim2.new(0, 150, 1, -35),
         Position = UDim2.new(0, 0, 0, 35),
-        BackgroundColor3 = self.Theme.TopBar:Lerp(Color3.new(0,0,0), 0.2),
+        BackgroundColor3 = Library.Theme.TopBar:Lerp(Color3.new(0,0,0), 0.2),
         ClipsDescendants = true,
     }, {
         Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4) }),
@@ -790,7 +779,7 @@ function Library:CreateWindow(data)
         Position = UDim2.new(0, 150, 0, 35),
         BackgroundTransparency = 1,
         ScrollBarThickness = 4,
-        ScrollBarImageColor3 = self.Theme.Stroke,
+        ScrollBarImageColor3 = Library.Theme.Stroke,
         CanvasSize = UDim2.new(0, 0, 0, 0),
     }, {
         Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 10) }),
@@ -805,7 +794,7 @@ function Library:CreateWindow(data)
             Parent = tabContainer,
             Size = UDim2.new(1, 0, 0, 30),
             Text = "",
-            BackgroundColor3 = self.Theme.Tab,
+            BackgroundColor3 = Library.Theme.Tab,
             AutoButtonColor = false,
         }, {
             Create("UICorner", { CornerRadius = UDim.new(0, 6) }),
@@ -815,7 +804,7 @@ function Library:CreateWindow(data)
                 Position = UDim2.new(0, 26, 0, 0),
                 Text = tabData.Name,
                 Font = Enum.Font.Gotham,
-                TextColor3 = self.Theme.TextDark,
+                TextColor3 = Library.Theme.TextDark,
                 BackgroundTransparency = 1,
                 TextXAlignment = Enum.TextXAlignment.Left,
             })
@@ -832,20 +821,20 @@ function Library:CreateWindow(data)
 
         if not currentTab then
             currentTab = { btn = tabBtn, page = tabPage }
-            tabBtn.BackgroundColor3 = self.Theme.TabSelected
-            tabBtn.TextLabel.TextColor3 = self.Theme.Text
+            tabBtn.BackgroundColor3 = Library.Theme.TabSelected
+            tabBtn.TextLabel.TextColor3 = Library.Theme.Text
             tabPage.Visible = true
         end
 
         tabBtn.MouseButton1Click:Connect(function()
             if currentTab then
-                currentTab.btn.BackgroundColor3 = self.Theme.Tab
-                currentTab.btn.TextLabel.TextColor3 = self.Theme.TextDark
+                currentTab.btn.BackgroundColor3 = Library.Theme.Tab
+                currentTab.btn.TextLabel.TextColor3 = Library.Theme.TextDark
                 currentTab.page.Visible = false
             end
             currentTab = { btn = tabBtn, page = tabPage }
-            tabBtn.BackgroundColor3 = self.Theme.TabSelected
-            tabBtn.TextLabel.TextColor3 = self.Theme.Text
+            tabBtn.BackgroundColor3 = Library.Theme.TabSelected
+            tabBtn.TextLabel.TextColor3 = Library.Theme.Text
             tabPage.Visible = true
         end)
 
@@ -862,7 +851,7 @@ function Library:CreateWindow(data)
                     Size = UDim2.new(1, 0, 0, 18),
                     Text = name,
                     Font = Enum.Font.GothamBold,
-                    TextColor3 = self.Theme.TextDark,
+                    TextColor3 = Library.Theme.TextDark,
                     BackgroundTransparency = 1,
                     TextXAlignment = Enum.TextXAlignment.Left,
                     TextSize = 13,
